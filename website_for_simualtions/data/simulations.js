@@ -23,9 +23,9 @@ const PUBLISHED = ['magnets-grade-10', 'projectile-motion', 'constrained-motion'
    ------------------------------------------------------------------------- */
 const GRADES = [
   { grade: 10, name: 'Grade 10', color: '#4f9dff',
-    tagline: 'Where it begins: motion you can watch and machines you can feel.' },
+    tagline: 'Where it begins: magnets, light and the first big ideas.' },
   { grade: 11, name: 'Grade 11', color: '#a06bff',
-    tagline: 'Mechanics and vectors, done properly.' },
+    tagline: 'Mechanics and vectors: motion, forces and machines in full.' },
   { grade: 12, name: 'Grade 12', color: '#ff5d8f',
     tagline: 'Fields, circuits and the invisible made visible.' },
 ];
@@ -49,7 +49,7 @@ const TOPICS = [
 
 const SIMS = [
   /* ---------------- MECHANICS ---------------- */
-  { id: 'projectile-motion', topic: 'mechanics', grade: 10, title: 'Projectile Motion',
+  { id: 'projectile-motion', topic: 'mechanics', grade: 11, title: 'Projectile Motion',
     blurb: 'One arc, two independent motions. Set the launch and watch.',
     story: 'Horizontal motion is steady, vertical motion is pulled by gravity, and together they draw the arc. Choose a case (level ground, a tower down to a platform, or a slope), set the speed and angle, then scrub through the flight and read T, H and R straight off the picture. Turn on the components, the twin angle and the predicted path to see why 30° and 60° land in the same place.',
     path: '../projectile_motion/index.html',
@@ -70,14 +70,14 @@ const SIMS = [
     thumb: '../pseudo_force/Screenshot 2025-07-20 112810 (1).png',
     youtube: '' },
 
-  { id: 'constrained-motion', topic: 'mechanics', grade: 10, title: 'Movable Pulley Constraint',
+  { id: 'constrained-motion', topic: 'mechanics', grade: 11, title: 'Movable Pulley Constraint',
     blurb: 'Strings, pulleys and wedges: how motion gets linked together.',
     story: 'When bodies are tied by strings or ride on wedges, their motions are locked to each other. Play with the constraints and discover the hidden relationships between their velocities and accelerations.',
     path: '../constrained_motion/constrained_motion_lab.html',
     thumb: '',
     youtube: '' },
 
-  { id: 'movable-pulley', topic: 'mechanics', grade: 10, title: 'Movable Pulley',
+  { id: 'movable-pulley', topic: 'mechanics', grade: 11, title: 'Movable Pulley',
     blurb: 'The classic 2:1 machine, trade force for distance.',
     story: 'A movable pulley halves the force but doubles the distance. Pull the rope and watch the mechanical advantage appear before your eyes.',
     path: '../constrained_motion/movable_pulley_simulation.html',
