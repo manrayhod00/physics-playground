@@ -65,6 +65,24 @@
     color:var(--ink);background:var(--panel);box-shadow:0 4px 14px -6px #000;
     transition:.15s transform;}
   #fs:hover{transform:translateY(-2px);}
+
+  /* ---- phones and small tablets ---- */
+  canvas{touch-action:none;}          /* let the canvas own the drag gesture */
+  @media (max-width:760px){
+    #tabs{gap:6px;padding:8px 8px 4px;}
+    .tab{padding:7px 11px;font-size:13px;gap:5px;border-radius:12px;}
+    .tab .em{font-size:15px;}
+    #hint{top:8px;font-size:13px;padding:6px 12px;white-space:normal;
+      max-width:calc(100% - 20px);text-align:center;line-height:1.25;}
+    #controls{bottom:10px;gap:7px;width:calc(100% - 16px);}
+    .ctl,.seg button{padding:8px 12px;font-size:13px;border-radius:11px;}
+    #fs{top:8px;right:8px;padding:7px 10px;font-size:15px;border-radius:10px;}
+  }
+  @media (max-width:420px){
+    .tab{padding:6px 9px;font-size:12px;}
+    .tab .em{font-size:14px;}
+    #hint{font-size:12px;}
+  }
 </style>
 </head>
 <body>
@@ -92,18 +110,29 @@ const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const hintEl = document.getElementById('hint');
 const controlsEl = document.getElementById('controls');
-let W = 0, H = 0, DPR = 1;
+let W = 0, H = 0, DPR = 1, SCALE = 1;
 
+/* The scenes are laid out in a fixed logical stage. On a screen narrower than
+   that, we shrink the whole drawing to fit instead of letting parts fall off
+   the edge, so W/H below are LOGICAL units, not CSS pixels.
+   A portrait screen gets a narrower, taller stage so nothing has to shrink as
+   much as it would inside the landscape one. */
 function resize(){
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   const r = cv.getBoundingClientRect();
-  W = r.width; H = r.height;
-  cv.width = Math.round(W * DPR);
-  cv.height = Math.round(H * DPR);
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const cssW = r.width, cssH = r.height;
+  cv.width = Math.round(cssW * DPR);
+  cv.height = Math.round(cssH * DPR);
+  const portrait = cssW < cssH;
+  const STAGE_W = portrait ? 560 : 820;
+  const STAGE_H = portrait ? 620 : 540;
+  SCALE = Math.min(1, cssW / STAGE_W, cssH / STAGE_H);
+  W = cssW / SCALE; H = cssH / SCALE;
+  ctx.setTransform(DPR * SCALE, 0, 0, DPR * SCALE, 0, 0);
   layoutScene();
 }
 window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', ()=>setTimeout(resize, 120));
 
 /* ============ shared physics ============ */
 // A "pole" source: {x,y,q}  q>0 = North (red), q<0 = South (blue)
@@ -265,6 +294,12 @@ function layoutScene(){
   const s7=state.s7;
   s7.cx=cx; s7.cy=cy-10; s7.Rr=Math.min(W,H)*0.2;
   if(!s7._init){ s7.compass.x=cx + s7.Rr + 170; s7.compass.y=cy - 60; s7._init=true; }
+
+  // keep every draggable compass inside the stage, however narrow it is
+  for(const c of [state.s1.compass, state.s4.compass, state.s5.compass, state.s7.compass]){
+    c.x = clamp(c.x, 70, W - 70);
+    c.y = clamp(c.y, 80, H - 70);
+  }
 }
 // rough continent blobs as (lat,lon) polygons, radians
 function makeContinents(){
@@ -859,7 +894,8 @@ function frame(now){
 ================================================================== */
 function relMouse(e){
   const r = cv.getBoundingClientRect();
-  return { x:e.clientX-r.left, y:e.clientY-r.top };
+  // back into logical stage units (see SCALE in resize)
+  return { x:(e.clientX-r.left)/SCALE, y:(e.clientY-r.top)/SCALE };
 }
 function hitMagnet(m, x, y){
   const dx=x-m.x, dy=y-m.y;
@@ -894,16 +930,20 @@ function pickTarget(x,y){
   }
   return null;
 }
-cv.addEventListener('mousedown', e=>{
+/* Pointer events, so a finger on a phone or tablet drags exactly like a mouse. */
+cv.addEventListener('pointerdown', e=>{
   const {x,y}=relMouse(e); mouse.down=true;
   const t=pickTarget(x,y);
   if(t){
     if(t.coilRotate){ drag={coilRotate:true, lastX:x, lastY:y}; }
     else { drag={ref:t.ref, ox:x-t.ref.x, oy:y-t.ref.y, isCompass:t.isCompass};
       if(t.ref.vx!==undefined){t.ref.vx=0;t.ref.vy=0;} }
-    cv.classList.add('grabbing'); }
+    cv.classList.add('grabbing');
+    if(cv.setPointerCapture) cv.setPointerCapture(e.pointerId);
+    e.preventDefault();           // stop the page scrolling under the finger
+  }
 });
-window.addEventListener('mousemove', e=>{
+window.addEventListener('pointermove', e=>{
   const {x,y}=relMouse(e); mouse.x=x; mouse.y=y;
   if(!drag) return;
   if(drag.coilRotate){
@@ -915,8 +955,11 @@ window.addEventListener('mousemove', e=>{
     drag.ref.x = clamp(x-drag.ox, 30, W-30); drag.ref.y = clamp(y-drag.oy, 60, H-30);
     if(activeTab===2 && state.s3.mode==='bar' && drag.ref===state.s3.magnet) state.s3.snap=0;
   }
-});
-window.addEventListener('mouseup', ()=>{ mouse.down=false; drag=null; cv.classList.remove('grabbing'); });
+  e.preventDefault();
+}, {passive:false});
+function endDrag(){ mouse.down=false; drag=null; cv.classList.remove('grabbing'); }
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 
 /* ==================================================================
    TABS + PER-SCENE CONTROLS
