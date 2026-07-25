@@ -1,0 +1,652 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Movable Pulley Constraint</title>
+<style>
+  :root{ --bg:#0f1722; --ink:#e8eef5; --muted:#9fb2c4; --line:#2a3a4d;
+    --A:#ff8a3d; --B:#37c8ff; --C:#b98cff; --good:#37d67a; --rope:#e9d9a6; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,Arial,sans-serif;
+    overscroll-behavior:none}
+  body{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  header{padding:12px 20px 0}
+  header h1{margin:0;font-size:18px}
+  select{background:#16212e;color:var(--ink);border:1px solid #3b5570;border-radius:9px;
+    padding:10px 12px;font-size:14.5px;font-weight:600;min-width:270px;min-height:44px;cursor:pointer;
+    touch-action:manipulation}
+  .stage{padding:0 20px}
+  canvas{display:block;width:100%;max-width:900px;background:linear-gradient(#0c131c,#0f1a26);
+    border:1px solid var(--line);border-radius:10px;touch-action:manipulation}
+  .strip{display:flex;gap:24px;flex-wrap:wrap;max-width:900px;margin:10px 0 2px;
+    font-size:15px;font-variant-numeric:tabular-nums}
+  .strip b{font-size:19px}
+
+  /* the control bar stays reachable if the page ever has to scroll on a tablet */
+  .controls{display:flex;flex-wrap:wrap;gap:14px 22px;padding:12px 20px 12px;align-items:flex-end;
+    position:sticky;top:0;z-index:20;background:rgba(15,23,34,.96);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  .ctl{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted)}
+  .ctl .now{color:var(--ink);font-weight:600}
+  .btnrow{display:flex;gap:10px;flex-wrap:wrap}
+  #sliders{display:flex;gap:22px;flex-wrap:wrap}
+
+  /* finger-sized sliders: the track is thin but the grab area is 28px tall, and
+     touch-action:none keeps a drag on the thumb instead of scrolling the page */
+  input[type=range]{-webkit-appearance:none;appearance:none;width:150px;height:28px;margin:0;
+    background:transparent;outline:none;cursor:pointer;touch-action:none}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:#2a3a4d}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;
+    margin-top:-7.5px;border-radius:50%;background:var(--th,var(--good));
+    border:3px solid #16212e;box-shadow:0 0 0 1px var(--th,var(--good));cursor:pointer}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:#2a3a4d}
+  input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;
+    background:var(--th,var(--good));border:3px solid #16212e;
+    box-shadow:0 0 0 1px var(--th,var(--good));cursor:pointer}
+
+  button{background:#1d2c3d;color:var(--ink);border:1px solid var(--line);border-radius:9px;
+    padding:9px 16px;min-height:44px;font-size:14px;cursor:pointer;
+    touch-action:manipulation;-webkit-user-select:none;user-select:none}
+  button.primary{background:var(--good);color:#04270f;border-color:var(--good);font-weight:700}
+  button:active{transform:scale(.97)}
+  @media (hover:hover){ button:hover{background:#26394f} button.primary:hover{background:#4ce089} }
+
+  /* ---- tablet ---- */
+  @media (max-width:820px){
+    header{padding:10px 14px 0}
+    header h1{font-size:15.5px}
+    .controls{gap:10px 16px;padding:10px 14px}
+    .stage{padding:0 14px}
+    .ctl.sys{flex:1 1 100%}
+    .ctl.sys select{width:100%;min-width:0}
+    .strip{gap:16px;font-size:14px}
+    .strip b{font-size:17px}
+  }
+  /* ---- phone: keep the drawing legible and let it scroll sideways ---- */
+  @media (max-width:640px){
+    .stage{overflow-x:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y}
+    canvas{min-width:640px}
+    .strip{max-width:none}
+    #sliders{flex:1 1 100%;gap:10px 18px}
+    #sliders .ctl{flex:1 1 44%}
+    #sliders input[type=range]{width:100%}
+    .btnrow button{flex:1 1 auto}
+  }
+
+  /* fullscreen: body is a flex column, canvas absorbs whatever height is left.
+     No fixed reserve, the chrome can wrap to any number of rows and the
+     canvas still fits, because it measures instead of assuming. */
+  :fullscreen body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  :fullscreen header{padding:4px 16px 0}
+  :fullscreen header h1{font-size:13px;color:var(--muted)}
+  :fullscreen select{padding:4px 9px;font-size:12px;min-width:220px}
+  :fullscreen .stage{flex:1;min-height:0;display:flex;flex-direction:column;
+    align-items:center;padding:0 12px}
+  :fullscreen canvas{flex:1;min-height:0;min-width:0;width:auto;height:auto;max-width:100%;
+    aspect-ratio:900/560;border-radius:10px}
+  :fullscreen .stage{overflow:visible}
+  :fullscreen .controls{position:static;background:none}
+  :fullscreen .strip{justify-content:center;margin:4px 0 0;flex:0 0 auto}
+  :fullscreen .controls{justify-content:center;padding:4px 16px 6px;flex:0 0 auto;gap:8px 18px}
+</style>
+</head>
+<body>
+<header><h1>Movable Pulley Constraint: tension and the work it does</h1></header>
+
+<div class="controls">
+  <div class="ctl sys">System <select id="nav"></select></div>
+  <div class="ctl">Speed: <span class="now"><span id="spNow">0.30</span>×</span>
+    <input type="range" id="sp" min="0.1" max="1.5" step="0.05" value="0.3"></div>
+  <div class="ctl"><span>&nbsp;</span>
+    <div class="btnrow">
+      <button class="primary" id="play">▶ Play</button>
+      <button id="reset">⟲ Reset</button>
+      <button id="fs">⛶ Fullscreen</button>
+    </div>
+  </div>
+  <div id="sliders"></div>
+</div>
+
+<div class="stage">
+  <canvas id="c" width="900" height="560"></canvas>
+  <div class="strip" id="strip"></div>
+</div>
+
+<script>
+const cv=document.getElementById('c'), ctx=cv.getContext('2d');
+const W=900,H=560, scale=46;
+// draw at the device's pixel density so the scene stays crisp on a retina tablet.
+// Every drawing routine keeps working in 900x560 units, because the scale is baked
+// into the context once here and nothing else ever touches the transform.
+(function(){ const dpr=Math.min(2,window.devicePixelRatio||1);
+  if(dpr===1) return;
+  cv.width=W*dpr; cv.height=H*dpr; ctx.scale(dpr,dpr); })();
+
+// ---------------- fullscreen ----------------
+(function(){
+  const btn=document.getElementById('fs'), root=document.documentElement;
+  const enter=root.requestFullscreen||root.webkitRequestFullscreen;
+  const exit=document.exitFullscreen||document.webkitExitFullscreen;
+  if(!enter){ btn.style.display='none'; return; }   // unsupported: don't show a dead button
+  const isFs=()=>document.fullscreenElement||document.webkitFullscreenElement;
+  btn.onclick=()=>{ isFs() ? exit.call(document) : enter.call(root); };
+  const sync=()=>{ btn.textContent = isFs() ? '⛶ Exit' : '⛶ Fullscreen'; };
+  document.addEventListener('fullscreenchange',sync);
+  document.addEventListener('webkitfullscreenchange',sync);
+  addEventListener('keydown',e=>{ if(e.key==='f'&&!/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) btn.click(); });
+})();
+const col={A:'#ff8a3d',B:'#37c8ff',C:'#b98cff',rope:'#edd280',good:'#37d67a',steel:'#8fa6bb'};
+const TC='#ffd166';                           // the colour tension always speaks in
+const m=x=>(x/scale);                         // px -> metres
+const cl=y=>Math.max(114,Math.min(466,y));    // keep a floating FBD on the canvas
+
+// the right-hand column is reserved for the ratio tape + the work table
+const PX=648, PX2=888;
+
+// ---------------- shared drawing helpers ----------------
+function rr(x,y,w,h,r){ ctx.beginPath();
+  if(ctx.roundRect){ ctx.roundRect(x,y,w,h,r); return; }
+  ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath(); }
+function arrow(x1,y1,x2,y2,c,lw){
+  ctx.strokeStyle=c;ctx.fillStyle=c;ctx.lineWidth=lw||2.4;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  const a=Math.atan2(y2-y1,x2-x1),s=7.5;
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-s*Math.cos(a-0.42),y2-s*Math.sin(a-0.42));
+  ctx.lineTo(x2-s*Math.cos(a+0.42),y2-s*Math.sin(a+0.42));
+  ctx.closePath();ctx.fill(); }
+function ceiling(){ ctx.fillStyle='#33465b'; ctx.fillRect(0,36,W,14);
+  ctx.strokeStyle='#597089'; ctx.lineWidth=2;
+  for(let x=6;x<W;x+=18){ctx.beginPath();ctx.moveTo(x,36);ctx.lineTo(x-12,50);ctx.stroke();}
+  ctx.fillStyle='#33465b'; ctx.fillRect(0,50,W,3); }
+function pulley(x,y,r,c){ c=c||col.steel;
+  ctx.lineWidth=5;ctx.strokeStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.stroke();
+  ctx.fillStyle='#20303f';ctx.beginPath();ctx.arc(x,y,r-6,0,7);ctx.fill();
+  ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill(); }
+function label(t,x,y,c){ ctx.fillStyle=c||'#cfe3f2';ctx.font='bold 15px Segoe UI';
+  ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,x,y); }
+function block(cx,cy,w,h,c,t,ang){ ang=ang||0;
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
+  ctx.fillStyle=c;ctx.fillRect(-w/2,-h/2,w,h);
+  ctx.strokeStyle='rgba(0,0,0,.25)';ctx.lineWidth=1;ctx.strokeRect(-w/2,-h/2,w,h);
+  ctx.fillStyle='#06121c';ctx.font='bold 16px Segoe UI';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(t,0,0);ctx.restore(); }
+// stroke a rope subpath in solid gold (extra args are the callers' rope colour + flow, unused)
+function rope(fn){ ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();fn(ctx);
+  ctx.setLineDash([]);ctx.lineWidth=3.4;ctx.strokeStyle=col.rope;
+  ctx.stroke();ctx.lineCap='butt'; }
+// a rope end tied to a pulley's axle: the wheel is drawn over the ropes, so the last
+// stub has to be laid back on top or the tie disappears inside the hub
+function axleTie(x,y,dy){
+  ctx.strokeStyle=col.rope;ctx.lineWidth=3.4;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+dy);ctx.stroke();ctx.lineCap='butt';
+  ctx.fillStyle=col.rope;ctx.beginPath();ctx.arc(x,y,4,0,7);ctx.fill(); }
+// dashed marker at a block's starting position
+function startLine(x,y,c,side){ ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle=c;ctx.globalAlpha=.85;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(x-32,y);ctx.lineTo(x+32,y);ctx.stroke();ctx.restore();
+  ctx.fillStyle=c;ctx.font='10px Segoe UI';ctx.textBaseline='middle';
+  ctx.textAlign=side<0?'right':'left';ctx.fillText('start',x+side*38,y); }
+
+// ---------------- tension read-outs ----------------
+// a small pill sitting ON a strand, saying how much tension that strand carries
+function ten(x,y,txt,c){ c=c||TC;
+  ctx.font='bold 12px Segoe UI';
+  const w=ctx.measureText(txt).width+13;
+  ctx.fillStyle='rgba(9,16,25,.9)'; rr(x-w/2,y-9.5,w,19,6); ctx.fill();
+  ctx.strokeStyle=c;ctx.lineWidth=1.3;ctx.stroke();
+  ctx.fillStyle=c;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,x,y+0.5); }
+// one line of plain talk about the rope, parked under the scene
+function ropeNote(txt){ ctx.fillStyle='#8ea3b7';ctx.font='12px Segoe UI';
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillText(txt,16,548); }
+
+// ---------------- free-body diagrams (tension only) ----------------
+// forces: [{t:'2T', uy:-1}]  uy<0 up, uy>0 down, or {ux:-1} for a pull along a slope.
+// Weight is deliberately absent: this lab is only about the work the STRING does.
+function fbd(x,y,o){
+  const f=o.forces, ang=o.ang||0;
+  // group the arrows by direction so equal pulls fan out side by side
+  const groups={};
+  f.forEach(q=>{ const k=(q.ux||0)+','+(q.uy||0); (groups[k]=groups[k]||[]).push(q); });
+  const reach=(g,s)=>Math.max(0,...f.map(q=>s*(q[g]||0)));
+  const fan=Math.max(...Object.keys(groups).map(k=>
+    Math.abs(+k.split(',')[0])<0.4?groups[k].length:1));
+  const spread=n=>Math.max(34,n*19/2+17);
+  let L=-Math.max(spread(fan),reach('ux',-1)*62),
+      R= Math.max(spread(fan),reach('ux', 1)*62);
+  // the box must also be wide enough for its own title and caption
+  ctx.font='11px Segoe UI'; const tw=o.title?ctx.measureText(o.title).width:0;
+  ctx.font='bold 11.5px Segoe UI'; const cw=o.cap?ctx.measureText(o.cap).width:0;
+  const need=Math.max(tw,cw)/2+9; L=Math.min(L,-need); R=Math.max(R,need);
+  const T0=-Math.max(17,reach('uy',-1)*54)-(o.title?15:0),
+        B0= Math.max(17,reach('uy', 1)*54)+(o.cap?17:0);
+  if(o.link){ ctx.save();ctx.setLineDash([3,4]);ctx.strokeStyle='rgba(150,175,200,.45)';ctx.lineWidth=1.2;
+    ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(o.link[0],o.link[1]);ctx.stroke();ctx.restore(); }
+  ctx.save();ctx.translate(x,y);
+  ctx.fillStyle='rgba(8,15,24,.86)'; rr(L,T0,R-L,B0-T0,9); ctx.fill();
+  ctx.strokeStyle='rgba(120,150,180,.32)';ctx.lineWidth=1;ctx.stroke();
+  if(o.title){ ctx.fillStyle='#8ea3b7';ctx.font='11px Segoe UI';ctx.textAlign='center';
+    ctx.textBaseline='top';ctx.fillText(o.title,0,T0+3); }
+  ctx.rotate(ang);
+  if(o.shape==='pulley'){
+    ctx.strokeStyle=o.color||col.steel;ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,13,0,7);ctx.stroke();
+    ctx.fillStyle=o.color||col.steel;ctx.beginPath();ctx.arc(0,0,3,0,7);ctx.fill();
+  }else{
+    ctx.fillStyle=o.color;ctx.fillRect(-15,-10.5,30,21);
+    ctx.fillStyle='#06121c';ctx.font='bold 13px Segoe UI';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(o.label,0,0);
+  }
+  ctx.rotate(-ang);   // arrows and their labels always stay upright, whatever the body does
+  Object.keys(groups).forEach(k=>{
+    const list=groups[k], ux=+k.split(',')[0], uy=+k.split(',')[1];
+    list.forEach((q,i)=>{
+      const off=(i-(list.length-1)/2)*19, px=-uy*off, py=ux*off;
+      arrow(px+ux*16,py+uy*12, px+ux*34,py+uy*30, q.c||TC, 2.4);
+      ctx.fillStyle=q.c||TC;ctx.font='bold 12.5px Segoe UI';
+      ctx.textAlign=Math.abs(ux)>0.4?(ux<0?'right':'left'):'center';
+      ctx.textBaseline=Math.abs(uy)>0.4?(uy<0?'bottom':'top'):'middle';
+      ctx.fillText(q.t,px+ux*39,py+uy*38);
+    }); });
+  if(o.cap){ ctx.fillStyle=o.capC||col.good;ctx.font='bold 11.5px Segoe UI';
+    ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(o.cap,0,B0-4); }
+  ctx.restore(); }
+
+// ---------------- ratio tape (top right) ----------------
+function tape(bars,caption){
+  const bx=PX,base=200,bw=bars.length>3?28:38,gap=bars.length>3?11:15,ppm=34,maxH=92;
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillStyle=col.good;ctx.font='bold 14px Segoe UI';ctx.fillText(caption,bx,80);
+  ctx.fillStyle='#7f93a6';ctx.font='11px Segoe UI';ctx.fillText('distance moved  x  (m)',bx,96);
+  bars.forEach((b,i)=>{ const x=bx+i*(bw+gap),h=Math.min(Math.abs(b.meters)*ppm,maxH);
+    ctx.strokeStyle='#3a4d63';ctx.lineWidth=1;ctx.strokeRect(x,base-maxH,bw,maxH);
+    ctx.fillStyle=b.color;ctx.fillRect(x,base-h,bw,h);
+    ctx.fillStyle='#e8eef5';ctx.font='11px Segoe UI';ctx.textAlign='center';ctx.textBaseline='top';
+    ctx.fillText(b.label,x+bw/2,base+5);
+    ctx.fillStyle=b.color;ctx.font='bold 12px Segoe UI';ctx.textBaseline='bottom';
+    ctx.fillText(Math.abs(b.meters).toFixed(2),x+bw/2,base-h-3); });
+  ctx.textAlign='left';ctx.textBaseline='alphabetic'; }
+
+// ---------------- work table (right, under the tape) ----------------
+// draws "W_A = +2T · x_A" with a real subscript, returns the width used
+function sub(txt,x,y,c,size,bold){
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';ctx.fillStyle=c;
+  const big=(bold?'bold ':'')+size+'px Segoe UI', small=(bold?'bold ':'')+(size-3.5)+'px Segoe UI';
+  let cx=x;
+  for(let i=0;i<txt.length;i++){
+    if(txt[i]==='_'&&i+1<txt.length){ ctx.font=small;ctx.fillText(txt[i+1],cx,y+3.5);
+      cx+=ctx.measureText(txt[i+1]).width;i++; }
+    else{ ctx.font=big;ctx.fillText(txt[i],cx,y);cx+=ctx.measureText(txt[i]).width; } }
+  return cx-x; }
+function wrapAt(txt,x,y,maxw,lh,c,font){ ctx.font=font;ctx.fillStyle=c;
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  let line=''; txt.split(' ').forEach(w=>{ const t=line?line+' '+w:w;
+    if(ctx.measureText(t).width>maxw&&line){ctx.fillText(line,x,y);y+=lh;line=w;} else line=t; });
+  if(line){ctx.fillText(line,x,y);y+=lh;} return y; }
+
+// one row: k = tension pulling on the body, in units of that rope's tension,
+// counted POSITIVE UPWARD.  d = the body's upward displacement in metres.
+function wr(name,c,k,d,sym){ sym=sym||'T';
+  const v=k*d, mag=Math.abs(k);
+  return {lhs:'W_'+name+' = '+(v<0?'−':'+')+(mag===1?'':mag)+sym+' · x_'+name, v:v, c:c}; }
+
+function workPanel(groups,note){
+  let y=240;
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#e8eef5';ctx.font='bold 14px Segoe UI';
+  ctx.fillText('Work done by TENSION',PX,y);
+  ctx.strokeStyle='#3a4d63';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(PX,y+6);ctx.lineTo(PX2,y+6);ctx.stroke(); y+=26;
+  groups.forEach(g=>{
+    if(g.title){ ctx.fillStyle='#9fb2c4';ctx.font='11.5px Segoe UI';ctx.textAlign='left';
+      ctx.fillText(g.title,PX,y); y+=16; }
+    let tot=0;
+    g.rows.forEach(r=>{ tot+=r.v;
+      sub(r.lhs,PX,y,r.c,13);
+      ctx.font='13px Segoe UI';ctx.textAlign='right';ctx.fillStyle=r.c;
+      ctx.fillText((r.v<0?'−':'+')+Math.abs(r.v).toFixed(2),PX2,y);
+      ctx.textAlign='left'; y+=18; });
+    ctx.strokeStyle='#2a3a4d';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(PX,y-11);ctx.lineTo(PX2,y-11);ctx.stroke();
+    const zero=Math.abs(tot)<5e-3;
+    sub('Σ W  ('+(g.unit||'T')+'·m)',PX,y+2,zero?col.good:'#ffcf4d',13.5,true);
+    ctx.font='bold 13.5px Segoe UI';ctx.textAlign='right';ctx.fillStyle=zero?col.good:'#ffcf4d';
+    ctx.fillText((zero?'0.00':tot.toFixed(2))+(zero?'  ✓':''),PX2,y+2);
+    ctx.textAlign='left'; y+=26; });
+  if(note) wrapAt(note,PX,y+2,PX2-PX,14,'#7f93a6','11.5px Segoe UI'); }
+
+const NOTE='An ideal string only passes energy along, so the tension does zero net work on the whole system.';
+
+// ================= SYSTEMS =================
+const SYS=[];
+
+// ---- ⓪ Movable pulley : B = ½ A ----
+SYS.push({ id:'s0', name:'① Movable pulley', tab:'B moves ½ of A',
+  sub:'Fixed pulley X on the ceiling; movable pulley Y carries B. One rope, so the tension is T all along it. Two strands hold Y up, so B is pulled by 2T and moves half as far as A.',
+  drivers:[{label:'Move B',amp:70,freq:1}],
+  render(v,mode){
+    const s=v[0]; ceiling();
+    const cx=250,yX=120,rX=38,rY=32,xY=cx+rX+rY,anchorX=xY+rY,ax=cx-rX,bx=xY;
+    const yY0=270,yA0=350,hA=38,hB=44,hang=26;
+    const yY=yY0+s, yBc=yY+rY+hang+hB/2, yAc=yA0-2*s, aTop=yAc-hA/2;
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(cx,50);ctx.lineTo(cx,yX-rX);ctx.stroke();
+    ctx.fillStyle=col.steel;ctx.beginPath();ctx.arc(anchorX,50,5,0,7);ctx.fill();
+    rope(p=>{p.moveTo(ax,aTop);p.lineTo(cx-rX,yX);p.arc(cx,yX,rX,Math.PI,2*Math.PI,false);},col.A,mode,2*s);
+    rope(p=>{p.moveTo(cx+rX,yX);p.lineTo(xY-rY,yY);p.arc(xY,yY,rY,Math.PI,0,true);p.lineTo(anchorX,50);},col.B,mode,2*s);
+    pulley(cx,yX,rX);pulley(xY,yY,rY,col.B);
+    label('X',cx-rX-9,yX);label('Y',xY+rY+9,yY,col.B);
+    ctx.strokeStyle='#9fb2c4';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xY,yY);ctx.lineTo(bx,yBc-hB/2);ctx.stroke();
+    block(ax,yAc,50,hA,col.A,'A');block(bx,yBc,50,hB,col.B,'B');
+    startLine(ax,yA0,col.A,-1); startLine(bx,yY0+rY+hang+hB/2,col.B,1);
+    // tension at every point of contact
+    ten(ax,(aTop+yX)/2,'T'); ten(cx+rX,(yX+yY)/2,'T'); ten(anchorX,(50+yY)/2,'T');
+    // free-body diagrams: tension only
+    fbd(112,cl(yAc),{label:'A',color:col.A,link:[ax-25,yAc],forces:[{t:'T',uy:-1}]});
+    fbd(452,cl(yBc),{label:'B',color:col.B,link:[bx+25,yBc],forces:[{t:'2T',uy:-1,c:col.B}]});
+    fbd(560,300,{shape:'pulley',color:col.B,title:'movable pulley Y',cap:'T net = 0  →  W = 0',
+      forces:[{t:'T',uy:-1},{t:'T',uy:-1},{t:'2T',uy:1,c:col.B}]});
+    ropeNote('One rope over a frictionless pulley → the tension T is the same at every point of contact.');
+    tape([{label:'A',meters:m(2*s),color:col.A},{label:'B',meters:m(s),color:col.B}],'A = 2 × B');
+    workPanel([{unit:'T',rows:[wr('A',col.A,1,m(2*s)), wr('B',col.B,2,-m(s))]}],NOTE);
+    return '<span style="color:'+col.A+'">A <b>'+Math.abs(m(2*s)).toFixed(2)+' m</b></span>'+
+           '<span style="color:'+col.B+'">B <b>'+Math.abs(m(s)).toFixed(2)+' m</b></span>'+
+           '<span style="color:'+col.good+'">ratio <b>2 : 1</b></span>';
+  }});
+
+// ---- ① Fixed X + movable Y, A on two strands : B = 3 × A ----
+SYS.push({ id:'s1', name:'② Two-pulley 3:1', tab:'B moves 3 × A',
+  sub:'Rope 1: A(P) → over fixed X → to the axle of movable Y. Rope 2: A(Q) → over movable Y → B. Rope 2 presses down on Y with 2T, so rope 1 must carry 2T. Block A therefore feels 2T + T = 3T, and B moves three times as far as A, the opposite way.',
+  drivers:[{label:'Move A',amp:40,freq:1}],
+  render(v,mode){
+    const q=v[0]; ceiling();
+    const xX=170,yX=110,rX=42,Px=xX-rX,Yx=xX+rX,rY=30,Qx=Yx-rY,Bx=Yx+rY;
+    const yY0=220,yA0=470,yB0=360,hA=42,hB=42;
+    const yY=yY0-q, yAt=yA0+q, yBt=yB0-3*q, yAc=yAt+hA/2, yBc=yBt+hB/2;
+    rope(p=>{p.moveTo(Px,yAt);p.lineTo(Px,yX);p.arc(xX,yX,rX,Math.PI,2*Math.PI,false);p.lineTo(Yx,yY);},col.A,mode,q);
+    rope(p=>{p.moveTo(Qx,yAt);p.lineTo(Qx,yY);p.arc(Yx,yY,rY,Math.PI,0,true);p.lineTo(Bx,yBt);},col.B,mode,2*q);
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(xX,50);ctx.lineTo(xX,yX-rX);ctx.stroke();
+    pulley(xX,yX,rX);pulley(Yx,yY,rY,col.B);
+    label('X',xX-rX-9,yX);label('Y',Yx+rY+9,yY,col.B);
+    block(155,yAc,96,hA,col.A,'A');block(Bx,yBc,46,hB,col.B,'B');
+    startLine(155,yA0+hA/2,col.A,-1); startLine(Bx,yB0+hB/2,col.B,1);
+    ctx.fillStyle='#cfe3f2';ctx.font='11px Segoe UI';ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText('P',Px,yAt-3);ctx.fillText('Q',Qx,yAt-3);
+    ten(Px,(yAt+yX)/2,'2T',col.A); ten(Yx,(yX+yY)/2,'2T',col.A);
+    ten(Qx,(yAt+yY)/2,'T',col.B);  ten(Bx,(yY+yBt)/2,'T',col.B);
+    fbd(58,cl(yAc),{label:'A',color:col.A,link:[107,yAc],
+      forces:[{t:'2T',uy:-1,c:col.A},{t:'T',uy:-1,c:col.B}]});
+    fbd(330,cl(yBc),{label:'B',color:col.B,link:[Bx+23,yBc],forces:[{t:'T',uy:-1,c:col.B}]});
+    fbd(478,210,{shape:'pulley',color:col.B,title:'movable pulley Y',cap:'T net = 0  →  W = 0',
+      forces:[{t:'2T',uy:-1,c:col.A},{t:'T',uy:1,c:col.B},{t:'T',uy:1,c:col.B}]});
+    ropeNote('Two ropes. Rope 2 (blue) carries T; it pulls Y down with 2T, so rope 1 (orange) must carry 2T.');
+    tape([{label:'A',meters:m(q),color:col.A},{label:'B',meters:m(3*q),color:col.B}],'B = 3 × A');
+    workPanel([{unit:'T',rows:[wr('A',col.A,3,-m(q)), wr('B',col.B,1,m(3*q))]}],NOTE);
+    return '<span style="color:'+col.A+'">A <b>'+Math.abs(m(q)).toFixed(2)+' m</b></span>'+
+           '<span style="color:'+col.B+'">B <b>'+Math.abs(m(3*q)).toFixed(2)+' m</b></span>'+
+           '<span style="color:'+col.good+'">ratio <b>3 : 1</b></span>';
+  }});
+
+// ---- ④ Three movable pulleys : B = 1.5 × A ----
+SYS.push({ id:'s3', name:'③ Three movable pulleys', tab:'B moves 1.5 × A',
+  sub:'One rope threads every pulley: ceiling anchor → under B’s pulley → over Y → under Z → over the fixed pulley X → and its far end ties to Y’s axle. One rope, so the tension is T everywhere. B and A each hang on two strands, so each feels 2T. Watch Y: the rope presses down on it with 2T but the tie only pulls up with T, so Y is the one part of this system that is NOT balanced.',
+  drivers:[{label:'Move A',amp:40,freq:1}],
+  render(v,mode){
+    const q=v[0]; ceiling();
+    // every strand runs vertically: each pulley sits on the tangent line of the one before it.
+    // rX = (rY + 2·rZ)/2 is what makes the Z→X strand and the X→Y tie both come out plumb.
+    const rB=30, rY=36, rZ=32, rX=(rY+2*rZ)/2;
+    const Bx=250, By0=410, By=By0-1.5*q;        // movable pulley carries B (rises 1.5×)
+    const Yx=Bx+rB+rY, Yy0=290, Yy=Yy0-q;      // movable Y (rises as A drops)
+    const Zx=Yx+rY+rZ, Zy0=410, Zy=Zy0+q;      // movable Z carries A
+    const Xx=Yx+rX, Xy=138;                    // fixed pulley X (large, up top)
+    const anx=Bx-rB;                            // ceiling anchor, vertically above B's left strand
+    const hang=22,hb=34;
+    const Ac=Zy+rZ+hang+hb/2, Bc=By+rB+hang+hb/2, A0=Zy0+rZ+hang+hb/2, B0=By0+rB+hang+hb/2;
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(Xx,50);ctx.lineTo(Xx,Xy-rX);ctx.stroke();
+    ctx.fillStyle=col.steel;ctx.beginPath();ctx.arc(anx,50,5,0,7);ctx.fill();
+    // segment β : anchor -> under B-pulley -> over Y -> down toward Z (2 strands hold B)
+    rope(p=>{p.moveTo(anx,50);p.lineTo(Bx-rB,By);p.arc(Bx,By,rB,Math.PI,0,true);
+      p.lineTo(Yx-rY,Yy);p.arc(Yx,Yy,rY,Math.PI,2*Math.PI,false);p.lineTo(Zx-rZ,Zy);},col.B,mode,1.5*q);
+    // segment α : under Z -> up & over X -> down, tying off on Y's axle (the extra tie)
+    rope(p=>{p.moveTo(Zx-rZ,Zy);p.arc(Zx,Zy,rZ,Math.PI,0,true);p.lineTo(Xx+rX,Xy);
+      p.arc(Xx,Xy,rX,0,Math.PI,true);p.lineTo(Yx,Yy);},col.B,mode,q);
+    pulley(Xx,Xy,rX);pulley(Yx,Yy,rY,col.B);pulley(Bx,By,rB,col.B);pulley(Zx,Zy,rZ,col.B);
+    label('X',Xx-rX-20,Xy);label('Y',Yx,Yy+rY+13,col.B);label('Z',Zx+rZ+12,Zy,col.B);
+    ctx.strokeStyle='#9fb2c4';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(Bx,By);ctx.lineTo(Bx,Bc-hb/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(Zx,Zy);ctx.lineTo(Zx,Ac-hb/2);ctx.stroke();
+    block(Bx,Bc,42,hb,col.B,'B');block(Zx,Ac,42,hb,col.A,'A');
+    startLine(Zx,A0,col.A,1); startLine(Bx,B0,col.B,-1);
+    ten(anx,(50+By)/2,'T'); ten(Xx-rX,(Xy+Yy)/2,'T');
+    ten(Bx,By+rB+11,'2T',col.B); ten(Zx,Zy+rZ+11,'2T',col.A);
+    fbd(120,cl(Bc),{label:'B',color:col.B,link:[Bx-21,Bc],forces:[{t:'2T',uy:-1,c:col.B}]});
+    fbd(500,cl(Ac),{label:'A',color:col.A,link:[Zx+21,Ac],forces:[{t:'2T',uy:-1,c:col.A}]});
+    fbd(556,170,{shape:'pulley',color:col.B,title:'movable pulley Y',cap:'T net = T ↓ (unbalanced)',
+      capC:'#ffcf4d',forces:[{t:'T',uy:-1},{t:'T',uy:1},{t:'T',uy:1}]});
+    ropeNote('One rope → tension T everywhere. Y is pulled down by 2T and up by only T, so Y also does work.');
+    tape([{label:'A',meters:m(q),color:col.A},{label:'B',meters:m(1.5*q),color:col.B}],'B = 1.5 × A');
+    workPanel([{unit:'T',rows:[wr('A',col.A,2,-m(q)), wr('B',col.B,2,m(1.5*q)), wr('Y',col.B,-1,m(q))]}],
+      'Y is part of the system too, so its row belongs in the table. Add all three and the string still does zero net work.');
+    return '<span style="color:'+col.A+'">A <b>'+m(q).toFixed(2)+' m</b> ↓</span>'+
+           '<span style="color:'+col.B+'">B <b>'+m(1.5*q).toFixed(2)+' m</b> ↑</span>'+
+           '<span style="color:'+col.good+'">ratio <b>3 : 2</b></span>';
+  }});
+
+// ---- ⑤ Two movable pulleys, three blocks : 2A + B + 2C = 0 ----
+SYS.push({ id:'s4', name:'④ Two movable pulleys', tab:'2A + B + 2C = 0',
+  sub:'Rope 1: A → over the fixed pulley X → down, tied to Y’s axle. Rope 2 (tension T): B → over movable Y → down under movable Z → up to the ceiling. Rope 2 presses on Y with 2T, so rope 1 carries 2T. C hangs from Z on two strands, so C feels 2T as well.',
+  drivers:[{label:'Move A',amp:20,freq:1},{label:'Move C',amp:20,freq:0.63}],
+  render(v,mode){
+    const q=v[0], w=v[1]; ceiling();
+    const rX=56, rY=40, rZ=26, hang=22, hb=34;
+    const Xx=300, Xy=140;                      // fixed pulley X, slung from the ceiling
+    const Ax=Xx-rX;                            // A hangs on X's left tangent
+    const Yx=Xx+rX, Yy0=280, Yy=Yy0-q;         // movable Y, axle tied to X's right tangent
+    const Bx=Yx-rY;                            // B hangs on Y's left tangent
+    const Zx=Yx+rY+rZ, Zy0=380, Zy=Zy0+w;      // movable Z, carries C, follows Y's right tangent
+    const anx=Zx+rZ;                           // rope 2's far end: straight up to the ceiling
+    const A0=450, B0=450, sB=-2*(q+w);         // sB = B's own displacement, down-positive
+    const Ac=A0+q, Bc=B0+sB, Cc=Zy+rZ+hang+hb/2, C0=Zy0+rZ+hang+hb/2;
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(Xx,50);ctx.lineTo(Xx,Xy-rX);ctx.stroke();
+    ctx.fillStyle=col.steel;ctx.beginPath();ctx.arc(anx,50,5,0,7);ctx.fill();
+    rope(p=>{p.moveTo(Ax,Ac-hb/2);p.lineTo(Ax,Xy);p.arc(Xx,Xy,rX,Math.PI,2*Math.PI,false);
+      p.lineTo(Yx,Yy);},col.A,mode,q);
+    rope(p=>{p.moveTo(Bx,Bc-hb/2);p.lineTo(Bx,Yy);p.arc(Yx,Yy,rY,Math.PI,2*Math.PI,false);
+      p.lineTo(Zx-rZ,Zy);p.arc(Zx,Zy,rZ,Math.PI,0,true);p.lineTo(anx,50);},col.B,mode,2*(q+w));
+    pulley(Xx,Xy,rX);pulley(Yx,Yy,rY,col.B);pulley(Zx,Zy,rZ,col.C);
+    label('X',Xx-rX-20,Xy);label('Y',Yx,Yy+rY+13,col.B);label('Z',Zx+rZ+14,Zy,col.C);
+    ctx.strokeStyle='#9fb2c4';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(Zx,Zy);ctx.lineTo(Zx,Cc-hb/2);ctx.stroke();
+    block(Ax,Ac,42,hb,col.A,'A');block(Bx,Bc,42,hb,col.B,'B');block(Zx,Cc,42,hb,col.C,'C');
+    startLine(Ax,A0,col.A,-1); startLine(Bx,B0,col.B,1); startLine(Zx,C0,col.C,1);
+    ten(Ax,(Ac-hb/2+Xy)/2,'2T',col.A); ten(Yx,(Xy+Yy)/2,'2T',col.A);
+    ten(Bx,(Bc-hb/2+Yy)/2,'T',col.B); ten(anx,(50+Zy)/2,'T',col.B);
+    ten(Zx,Zy+rZ+11,'2T',col.C);
+    fbd(96,cl(Ac),{label:'A',color:col.A,link:[Ax-21,Ac],forces:[{t:'2T',uy:-1,c:col.A}]});
+    fbd(180,cl(Bc),{label:'B',color:col.B,link:[Bx-21,Bc],forces:[{t:'T',uy:-1,c:col.B}]});
+    fbd(556,cl(Cc),{label:'C',color:col.C,link:[Zx+21,Cc],forces:[{t:'2T',uy:-1,c:col.C}]});
+    fbd(556,150,{shape:'pulley',color:col.B,title:'pulleys Y and Z',cap:'T net = 0  →  W = 0',
+      forces:[{t:'2T',uy:-1,c:col.A},{t:'T',uy:1,c:col.B},{t:'T',uy:1,c:col.B}]});
+    ropeNote('Two ropes. Rope 2 (blue) carries T. Y feels 2T down from it, so rope 1 (orange) must carry 2T.');
+    tape([{label:'A',meters:m(q),color:col.A},{label:'C',meters:m(w),color:col.C},
+          {label:'B',meters:m(sB),color:col.B}],'B = −2 (A + C)');
+    workPanel([{unit:'T',rows:[wr('A',col.A,2,-m(q)), wr('B',col.B,1,-m(sB)), wr('C',col.C,2,-m(w))]}],
+      'Both movable pulleys are balanced (T net = 0), so neither adds a row. '+NOTE);
+    const ar=s=>s>0.5?' ↓':s<-0.5?' ↑':'';
+    return '<span style="color:'+col.A+'">A <b>'+m(q).toFixed(2)+' m</b>'+ar(q)+'</span>'+
+           '<span style="color:'+col.C+'">C <b>'+m(w).toFixed(2)+' m</b>'+ar(w)+'</span>'+
+           '<span style="color:'+col.B+'">B <b>'+m(sB).toFixed(2)+' m</b>'+ar(sB)+'</span>'+
+           '<span style="color:'+col.good+'"><b>2a_A + a_B + 2a_C = 0</b></span>';
+  }});
+
+// ---- ⑦ Three movable + four fixed, three blocks : 2A + 4B + C = 0 ----
+SYS.push({ id:'s8', name:'⑤ Three movable + 4 fixed', tab:'2A + 4B + C = 0',
+  sub:'One rope, comb-threaded: ceiling tie → under movable M₁ → over fixed F₁ → under movable M₂ → over F₂ → under movable M₃ → over F₃ → over F₄ → down to C. One rope means one tension T. A rides one movable pulley (2T); B rides two movable pulleys (2T + 2T = 4T); C is the free end (T).',
+  drivers:[{label:'Move A',amp:16,freq:1},{label:'Move B',amp:12,freq:0.7}],
+  render(v,mode){
+    const q=v[0], w=v[1]; ceiling();
+    // comb layout, tangent-stacked so every supporting strand is plumb.
+    const RF=30, RM=26, hang=18, hb=30;
+    const M1x=130, F1x=186, M2x=242, F2x=298, M3x=354, F3x=410, F4x=494;
+    const Fy=110, My0=310;                         // fixed row on the ceiling; movable rest height
+    const M1y=My0+q, M23y=My0+w;                   // A's pulley moves by A; B's two pulleys move by B
+    const tie=M1x-RM;                              // ceiling tie for the free-end run
+    const Cx=F4x+RF, Cy0=300, sC=-(2*q+4*w), Cc=Cy0+sC;   // C on the free end
+    const Ac=M1y+RM+hang+hb/2, Bc=M23y+RM+hang+hb/2, A0=My0+RM+hang+hb/2;
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;
+    [F1x,F2x,F3x,F4x].forEach(fx=>{ctx.beginPath();ctx.moveTo(fx,50);ctx.lineTo(fx,Fy-RF);ctx.stroke();});
+    ctx.fillStyle=col.steel;ctx.beginPath();ctx.arc(tie,50,5,0,7);ctx.fill();
+    rope(p=>{ p.moveTo(tie,50); p.lineTo(tie,M1y);
+      p.arc(M1x,M1y,RM,Math.PI,0,true);                                   // under M₁ (A)
+      p.lineTo(F1x-RF,Fy); p.arc(F1x,Fy,RF,Math.PI,2*Math.PI,false);      // over F₁
+      p.lineTo(M2x-RM,M23y); p.arc(M2x,M23y,RM,Math.PI,0,true);           // under M₂ (B)
+      p.lineTo(F2x-RF,Fy); p.arc(F2x,Fy,RF,Math.PI,2*Math.PI,false);      // over F₂
+      p.lineTo(M3x-RM,M23y); p.arc(M3x,M23y,RM,Math.PI,0,true);           // under M₃ (B)
+      p.lineTo(F3x-RF,Fy); p.arc(F3x,Fy,RF,Math.PI,2*Math.PI,false);      // over F₃
+      p.lineTo(F4x-RF,Fy); p.arc(F4x,Fy,RF,Math.PI,2*Math.PI,false);      // over F₄
+      p.lineTo(Cx,Cc-hb/2); }, col.C, mode, q+w);
+    [F1x,F2x,F3x,F4x].forEach(fx=>pulley(fx,Fy,RF));
+    pulley(M1x,M1y,RM,col.A);pulley(M2x,M23y,RM,col.B);pulley(M3x,M23y,RM,col.B);
+    label('F₁',F1x,Fy-RF-11);label('F₂',F2x,Fy-RF-11);label('F₃',F3x,Fy-RF-11);label('F₄',F4x,Fy-RF-11);
+    ctx.strokeStyle='#9fb2c4';ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(M1x,M1y);ctx.lineTo(M1x,Ac-hb/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(M2x,M23y);ctx.lineTo(M2x,Bc-hb/2);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(M3x,M23y);ctx.lineTo(M3x,Bc-hb/2);ctx.stroke();
+    block(M1x,Ac,84,hb,col.A,'A');
+    block((M2x+M3x)/2,Bc,150,hb,col.B,'B');
+    block(Cx,Cc,40,hb,col.C,'C');
+    startLine(M1x,A0,col.A,-1); startLine((M2x+M3x)/2,A0,col.B,1); startLine(Cx,Cy0,col.C,1);
+    ten(tie,(50+M1y)/2,'T'); ten(F1x+RF,(Fy+M23y)/2,'T'); ten(Cx,(Fy+Cc-hb/2)/2,'T');
+    fbd(130,470,{label:'A',color:col.A,link:[M1x,Ac+hb/2],forces:[{t:'2T',uy:-1,c:col.A}]});
+    fbd(298,470,{label:'B',color:col.B,link:[(M2x+M3x)/2,Bc+hb/2],
+      forces:[{t:'2T',uy:-1,c:col.B},{t:'2T',uy:-1,c:col.B}]});
+    fbd(524,470,{label:'C',color:col.C,link:[Cx,Cc+hb/2],forces:[{t:'T',uy:-1,c:col.C}]});
+    fbd(450,214,{shape:'pulley',color:col.steel,title:'pulleys M₁, M₂, M₃',
+      cap:'T net = 0  →  W = 0',forces:[{t:'T',uy:-1},{t:'T',uy:-1},{t:'2T',uy:1}]});
+    ropeNote('One rope over frictionless pulleys → the tension T is the same at every point of contact.');
+    tape([{label:'A',meters:m(q),color:col.A},{label:'B',meters:m(w),color:col.B},
+          {label:'C',meters:m(sC),color:col.C}],'2A + 4B + C = 0');
+    workPanel([{unit:'T',rows:[wr('A',col.A,2,-m(q)), wr('B',col.B,4,-m(w)), wr('C',col.C,1,-m(sC))]}],NOTE);
+    const ar=s=>s>0.5?' ↓':s<-0.5?' ↑':'';
+    return '<span style="color:'+col.A+'">A <b>'+m(q).toFixed(2)+' m</b>'+ar(q)+'</span>'+
+           '<span style="color:'+col.B+'">B <b>'+m(w).toFixed(2)+' m</b>'+ar(w)+'</span>'+
+           '<span style="color:'+col.C+'">C <b>'+m(sC).toFixed(2)+' m</b>'+ar(sC)+'</span>'+
+           '<span style="color:'+col.good+'"><b>2a_A + 4a_B + a_C = 0</b></span>';
+  }});
+// ---- ⑥ Three fixed + two movable, two ropes : A + 2B + 2C = 0 ----
+// Pulleys are numbered from the RIGHT, the way the textbook figure counts them:
+//   P₁ fixed · P₂ fixed · P₃ movable (carries B) · P₄ fixed · P₅ movable
+// Rope 1: C → over P₁ → over P₂ → over P₄ → tied to P₅'s axle
+// Rope 2: tied to P₂'s axle → under P₃ → over P₅ → block A
+// Rope 2 runs OVER P₅, so it presses down on it with 2T and rope 1 must carry 2T.
+SYS.push({ id:'s6', name:'⑥ Three fixed + two movable', tab:'A + 2B + 2C = 0',
+  sub:'Rope 1: C → over fixed P₁ → over fixed P₂ → over fixed P₄ → its far end ties to the axle of movable P₅. Rope 2 (tension T): tied to P₂’s axle → down under movable P₃ → up over P₅ → down to A. B hangs from P₃. Rope 2 passes over P₅ and presses down on it with 2T, so rope 1 carries 2T: A feels T, B feels 2T (two strands hold P₃) and C feels 2T.',
+  drivers:[{label:'Move B',amp:14,freq:1},{label:'Move C',amp:14,freq:0.63}],
+  render(v,mode){
+    const b=v[0], c=v[1]; ceiling();
+    // radii obey 2·r4 + r2 = 2·r3 + r5, which is what puts P₅ exactly under P₄'s left
+    // tangent while P₅ also sits on P₃'s left tangent: every strand comes out plumb.
+    const r1=26,r2=22,r3=46,r4=55,r5=40, hang=30, hb=34;
+    const X5=210, X4=X5+r4, X2=X4+r4+r2, X3=X2-r3, X1=X2+r2+r1;
+    const y1=140, y2=225, y4=120, y5_0=265, y3_0=370;
+    const y5=y5_0-c;                      // rope 1 lifts P₅ by exactly what C drops
+    const y3=y3_0+b;                      // P₃ rides with B
+    const a=-2*(b+c);                     // A's own displacement, down-positive
+    const Ax=X5-r5, Bx=X3, Cx=X1+r1;
+    const yA0=430, yC0=340;
+    const Ac=yA0+a, Cc=yC0+c, Bc=y3+r3+hang+hb/2, B0=y3_0+r3+hang+hb/2;
+    // the three fixed pulleys hang from the ceiling on rods
+    ctx.strokeStyle=col.steel;ctx.lineWidth=3;
+    [[X1,y1,r1],[X2,y2,r2],[X4,y4,r4]].forEach(p=>{
+      ctx.beginPath();ctx.moveTo(p[0],50);ctx.lineTo(p[0],p[1]-p[2]);ctx.stroke(); });
+    // rope 2 first: C's rope crosses above it, and the pulleys cover both
+    rope(p=>{p.moveTo(X2,y2);p.lineTo(X2,y3);                     // P₂'s axle straight down
+      p.arc(X3,y3,r3,0,Math.PI,false);                            // under P₃ (B's pulley)
+      p.lineTo(X5+r5,y5);p.arc(X5,y5,r5,0,Math.PI,true);          // up and over P₅
+      p.lineTo(Ax,Ac-hb/2);},col.A,mode,2*b);                     // down to A
+    // rope 1: C up over P₁, over P₂, over P₄, then down to P₅'s axle
+    rope(p=>{p.moveTo(Cx,Cc-hb/2);p.lineTo(Cx,y1);
+      p.arc(X1,y1,r1,0,Math.PI,true);p.lineTo(X2+r2,y2);
+      p.arc(X2,y2,r2,0,Math.PI,true);p.lineTo(X4+r4,y4);
+      p.arc(X4,y4,r4,0,Math.PI,true);p.lineTo(X5,y5);},col.C,mode,c);
+    pulley(X1,y1,r1);pulley(X2,y2,r2);pulley(X4,y4,r4);
+    pulley(X3,y3,r3,col.B);pulley(X5,y5,r5,col.A);
+    axleTie(X2,y2,r2+7);                  // rope 2 starts here, on P₂'s axle
+    axleTie(X5,y5,-(r5+7));               // rope 1 ends here, on P₅'s axle
+    // labels are kept off the plumb strands, which run at x = X5, X5+r5 and X2
+    label('P₁',X1+r1+13,y1);label('P₂',X2+r2+13,y2);label('P₄',X4-r4-22,y4);
+    label('P₃',X3-r3-17,y3+17,col.B);label('P₅',X5-r5-19,y5,col.A);
+    ctx.strokeStyle='#9fb2c4';ctx.lineWidth=3;                    // P₃'s hanger down to B
+    ctx.beginPath();ctx.moveTo(X3,y3);ctx.lineTo(Bx,Bc-hb/2);ctx.stroke();
+    block(Ax,Ac,42,hb,col.A,'A');block(Bx,Bc,46,hb,col.B,'B');block(Cx,Cc,42,hb,col.C,'C');
+    startLine(Ax,yA0,col.A,-1); startLine(Bx,B0,col.B,1); startLine(Cx,yC0,col.C,1);
+    ten(Cx,(Cc-hb/2+y1)/2,'2T',col.C); ten(X5,(y4+y5)/2,'2T',col.C);
+    ten(X2,(y2+y3)/2+6,'T',col.B); ten(X3-r3,(y3+y5)/2,'T',col.B);
+    ten(Ax,(y5+Ac-hb/2)/2,'T',col.A); ten(X3,y3+r3+14,'2T',col.B);
+    fbd(72,cl(Ac),{label:'A',color:col.A,link:[Ax-22,Ac],forces:[{t:'T',uy:-1,c:col.A}]});
+    fbd(470,486,{label:'B',color:col.B,link:[Bx+24,Bc],forces:[{t:'2T',uy:-1,c:col.B}]});
+    fbd(568,cl(Cc),{label:'C',color:col.C,link:[Cx+22,Cc],forces:[{t:'2T',uy:-1,c:col.C}]});
+    fbd(568,150,{shape:'pulley',color:col.A,title:'movable pulley P₅',cap:'T net = 0  →  W = 0',
+      forces:[{t:'2T',uy:-1,c:col.C},{t:'T',uy:1,c:col.A},{t:'T',uy:1,c:col.A}]});
+    ropeNote('Two ropes. Rope 2 (to A) carries T and runs over P₅, pushing it down with 2T, so rope 1 (to C) carries 2T.');
+    tape([{label:'A',meters:m(a),color:col.A},{label:'B',meters:m(b),color:col.B},
+          {label:'C',meters:m(c),color:col.C}],'A = −2 (B + C)');
+    workPanel([{unit:'T',rows:[wr('A',col.A,1,-m(a)), wr('B',col.B,2,-m(b)), wr('C',col.C,2,-m(c))]}],
+      'P₃ and P₅ are both balanced (T net = 0), so neither adds a row. '+NOTE);
+    const ar=s=>s>0.5?' ↓':s<-0.5?' ↑':'';
+    return '<span style="color:'+col.A+'">A <b>'+m(a).toFixed(2)+' m</b>'+ar(a)+'</span>'+
+           '<span style="color:'+col.B+'">B <b>'+m(b).toFixed(2)+' m</b>'+ar(b)+'</span>'+
+           '<span style="color:'+col.C+'">C <b>'+m(c).toFixed(2)+' m</b>'+ar(c)+'</span>'+
+           '<span style="color:'+col.good+'"><b>a_A + 2a_B + 2a_C = 0</b></span>';
+  }});
+
+// ================= ENGINE =================
+// Play runs ONE sweep: every block eases from its start position to full travel,
+// then the run stops there.  phase is that sweep's progress, 0 -> 1.
+let cur=SYS[0], mode=0, vals=[0], playing=false, phase=0, speed=0.3, last=null;
+const ease=p=>0.5-0.5*Math.cos(Math.PI*p);      // starts at rest, ends at rest
+
+function buildNav(){ const n=document.getElementById('nav'); n.innerHTML='';
+  SYS.forEach((s,i)=>{ const o=document.createElement('option');
+    o.value=i; o.textContent=s.name;
+    n.appendChild(o); });
+  n.value=SYS.indexOf(cur);
+  n.onchange=e=>select(SYS[+e.target.value]); }
+function buildSliders(){ const box=document.getElementById('sliders'); box.innerHTML='';
+  cur.drivers.forEach((d,i)=>{ if(d.amp===0)return;
+    const wrap=document.createElement('div'); wrap.className='ctl';
+    wrap.innerHTML=d.label+' <input type="range" min="'+(-d.amp)+'" max="'+d.amp+'" step="1" value="'+(vals[i]||0)+'">';
+    const r=wrap.querySelector('input');
+    // "Move A" gets A's colour, so the thumb you grab matches the block that answers
+    const who=(d.label.match(/\b([ABC])\b/)||[])[1];
+    if(who) r.style.setProperty('--th',col[who]);
+    r.oninput=e=>{ playing=false; document.getElementById('play').textContent='▶ Play'; vals[i]=+e.target.value; };
+    r.dataset.i=i; box.appendChild(wrap); }); }
+function select(s){ cur=s; vals=cur.drivers.map(()=>0); phase=0; playing=false;
+  document.getElementById('play').textContent='▶ Play';
+  buildNav(); buildSliders(); }
+
+function frame(ts){ if(last==null)last=ts; let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
+  if(playing){
+    phase += dt*speed*0.66;                // one sweep takes about 5 s at 0.30×
+    if(phase>=1){ phase=1; playing=false; document.getElementById('play').textContent='▶ Play'; }
+    cur.drivers.forEach((d,i)=>{ vals[i]=d.amp*ease(phase); });
+    document.querySelectorAll('#sliders input').forEach(r=>{ r.value=vals[+r.dataset.i]; }); }
+  ctx.clearRect(0,0,W,H);
+  const stripHTML=cur.render(vals,mode);
+  document.getElementById('strip').innerHTML=stripHTML;
+  requestAnimationFrame(frame); }
+
+document.getElementById('play').onclick=e=>{
+  if(phase>=1) phase=0;                    // finished sweep: play again from the start
+  playing=!playing; e.target.textContent=playing?'⏸ Pause':'▶ Play'; };
+document.getElementById('reset').onclick=()=>{ vals=cur.drivers.map(()=>0); phase=0; playing=false;
+  document.getElementById('play').textContent='▶ Play';
+  document.querySelectorAll('#sliders input').forEach(r=>r.value=0); };
+document.getElementById('sp').oninput=e=>{ speed=+e.target.value; document.getElementById('spNow').textContent=speed.toFixed(2); };
+
+select(SYS[0]);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
