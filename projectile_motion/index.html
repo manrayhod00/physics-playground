@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Projectile Motion</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#11161f; --line:#232c3a; --ink:#e8eef7; --dim:#8b97a8;
+    --acc:#7dd3fc;
+    --vel:#ffffff; --cx:#22d3ee; --cy:#f472b6; --acc-g:#4ade80; --arc:#ffd166;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%; overscroll-behavior:none}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:13px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+    display:flex; overflow:hidden;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+  }
+  #stage{flex:1; position:relative; min-width:0; min-height:0}
+  canvas{display:block; width:100%; height:100%; touch-action:none}
+
+  /* ---- floating readouts ---- */
+  .card{
+    position:absolute; z-index:5;
+    background:rgba(17,22,31,.88); border:1px solid var(--line); border-radius:10px;
+    padding:10px 13px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    pointer-events:none;
+  }
+  #hud{ top:12px; left:12px; min-width:186px }
+  #setup{ top:12px; right:12px; font-family:'Consolas','Menlo',monospace; font-size:12.5px }
+
+  .ttl{font:700 10px/1.3 ui-sans-serif,system-ui,sans-serif; letter-spacing:.11em;
+       text-transform:uppercase; color:var(--dim); margin-bottom:6px}
+  .r{display:flex; justify-content:space-between; gap:16px; font-size:12.5px}
+  .r .k{color:var(--dim)}
+  .r .v{font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink)}
+  .r .v.x{color:var(--cx)}  .r .v.y{color:var(--cy)}  .r .v.t{color:var(--acc)}
+  #hud hr{border:none; border-top:1px solid var(--line); margin:6px 0}
+  .big{font-size:14.5px}
+  .g2{display:grid; grid-template-columns:auto auto; column-gap:20px; row-gap:1px}
+  .g3{display:grid; grid-template-columns:repeat(3,auto); column-gap:15px}
+  .g3 .c{display:flex; flex-direction:column; gap:1px}
+  .g3 .c .k{font-size:10px; color:var(--dim)}
+  .g3 .c b{font-size:14px; color:#fff; font-variant-numeric:tabular-nums; white-space:nowrap}
+  #o-kind{font-size:11px; font-weight:700; margin-top:7px; white-space:nowrap}
+  #o-kind.hide{display:none}
+  #o-kind.top{color:#fbbf24}  #o-kind.side{color:#f87171}  #o-kind.over{color:#8b97a8}
+  #setup .l{color:var(--dim); margin-top:3px}
+  #setup .l:first-of-type{margin-top:0}
+  #setup .n{color:var(--cx); font-weight:700}
+  #setup .m{color:var(--cy); font-weight:700}
+  #setup .g{color:var(--acc-g); font-weight:700}
+
+  /* ---- right panel ---- */
+  #panel{
+    --px:15px; --pt:14px;
+    width:318px; flex-shrink:0; min-width:0; max-width:100%;
+    background:var(--panel); border-left:1px solid var(--line);
+    padding:var(--pt) var(--px) 34px; overflow-y:auto; scrollbar-width:thin;
+    scrollbar-color:var(--line) transparent;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y;
+  }
+  #panel::-webkit-scrollbar{width:5px}
+  #panel::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px}
+  #panel h1{font:700 15.5px/1.3 ui-sans-serif,system-ui,sans-serif; color:#fff}
+  #panel h1 span{display:block; font:400 11px/1.4 ui-sans-serif,system-ui,sans-serif;
+    color:var(--dim); margin-top:2px}
+  #panel h2{font:700 10.5px/1.3 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.1em; text-transform:uppercase;
+    color:var(--dim); margin:18px 0 10px; padding-bottom:7px; border-bottom:1px solid var(--line)}
+  #panel h1{margin-bottom:16px}
+
+  /* ---- play · step · reset : stays pinned at the top while the panel scrolls ---- */
+  #dock{
+    /* the sticky offset is measured from the panel's padding edge, so it has to be
+       pulled up by the panel's own top padding, otherwise a sliver of the scrolling
+       content shows through above the dock */
+    position:sticky; top:calc(-1 * var(--pt)); z-index:12;
+    margin:calc(-1 * var(--pt)) calc(-1 * var(--px)) 15px;
+    padding:10px var(--px) 11px;
+    background:rgba(17,22,31,.95); border-bottom:1px solid var(--line);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    box-shadow:0 8px 16px -12px #000;
+  }
+  #dock .btns button{min-height:42px; font-size:12px}
+  #dock .tt{
+    font:700 9.5px/1.3 ui-sans-serif,system-ui,sans-serif; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--dim); margin-bottom:7px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  #dock .tt b{color:var(--acc); font-variant-numeric:tabular-nums; letter-spacing:0; font-size:11px}
+
+  /* ---- case cards, stacked ---- */
+  .cases{display:flex; flex-direction:column; gap:8px}
+  .case{
+    position:relative; display:flex; align-items:center; gap:12px; width:100%;
+    min-height:56px; padding:10px 13px; overflow:hidden;
+    border:1px solid var(--line); border-radius:11px; background:#161d29;
+    color:var(--dim); cursor:pointer; text-align:left; font:inherit;
+    -webkit-user-select:none; user-select:none; touch-action:manipulation;
+    transition:background .16s, border-color .16s, color .16s;
+  }
+  .case svg{width:30px; height:24px; flex-shrink:0; overflow:visible}
+  .case .txt{display:flex; flex-direction:column; min-width:0}
+  .case .cn{display:block; font:700 12.5px/1.25 ui-sans-serif,system-ui,sans-serif; color:#c3ccd9}
+  .case .cd{display:block; font-size:10.5px; line-height:1.35; color:#6b7a8d; margin-top:2px}
+  .case::before{
+    content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+    border-radius:0 3px 3px 0; background:var(--acc); opacity:0; transition:opacity .16s;
+  }
+  .case.on{
+    border-color:var(--acc); color:var(--acc);
+    background:linear-gradient(100deg, rgba(125,211,252,.15), rgba(125,211,252,.04));
+    box-shadow:0 0 0 1px rgba(125,211,252,.28), 0 3px 14px -6px rgba(125,211,252,.5);
+  }
+  .case.on::before{opacity:1}
+  .case.on .cn{color:#fff}
+  .case.on .cd{color:#a3bdd2}
+  .case:active{transform:scale(.985)}
+
+  .row{margin-bottom:12px}
+  .row.hide{display:none}
+  .row label{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:11.5px; color:var(--dim); margin-bottom:3px}
+  .row label b{
+    color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;
+    background:#0d121a; border:1px solid var(--line); border-radius:6px; padding:2px 8px;
+    font-size:11.5px;
+  }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:28px; margin:0;
+    background:transparent; outline:none; cursor:pointer; touch-action:none;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:3px; background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:19px; height:19px; margin-top:-7.5px; border-radius:50%;
+    background:var(--acc); border:3px solid var(--panel);
+    box-shadow:0 0 0 1px var(--acc); cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{height:4px; border-radius:3px; background:var(--line)}
+  input[type=range]::-moz-range-thumb{
+    width:19px; height:19px; border-radius:50%; background:var(--acc);
+    border:3px solid var(--panel); box-shadow:0 0 0 1px var(--acc); cursor:pointer;
+  }
+  input[type=range]:active::-webkit-slider-thumb{background:#a5e3ff}
+
+  .note{font-size:10.5px; color:#6b7a8d; font-style:italic}
+  .btns{display:flex; gap:6px}
+  .btns button{
+    flex:1; min-height:44px; padding:8px 4px; border:1px solid var(--line); border-radius:9px;
+    background:#161d29; color:var(--dim); cursor:pointer; touch-action:manipulation;
+    -webkit-user-select:none; user-select:none;
+    font:600 11.5px/1.25 ui-sans-serif,system-ui,sans-serif;
+    transition:background .16s, border-color .16s, color .16s;
+  }
+  .btns button.on{background:var(--acc); color:#06121a; border-color:var(--acc)}
+  .btns button:active{transform:scale(.97)}
+
+  .chk{display:flex; align-items:center; gap:9px; cursor:pointer;
+       color:#c3ccd9; font-size:12px; min-height:34px; padding:0 6px;
+       border-radius:8px; user-select:none; -webkit-user-select:none;
+       touch-action:manipulation}
+  .chk.hide{display:none}
+  .chk input{width:17px; height:17px; accent-color:var(--acc); cursor:pointer; flex-shrink:0}
+  .chk i{width:13px; height:3px; border-radius:2px; flex-shrink:0}
+  .chk:active{background:#161d29}
+
+  @media (hover:hover){
+    .case:hover{border-color:#3a75a0; background:#1a2230}
+    .case.on:hover{border-color:var(--acc)}
+    .btns button:hover{color:var(--ink); border-color:var(--acc)}
+    .btns button.on:hover{color:#06121a}
+    .chk:hover{background:#161d29}
+  }
+
+  /* ---- tablet / phone: panel drops below the stage ---- */
+  @media (max-width:880px){
+    body{flex-direction:column}
+    #panel{
+      width:100%; max-height:47vh; border-left:none; border-top:1px solid var(--line);
+      --px:16px; --pt:12px; padding:var(--pt) var(--px) 26px;
+    }
+    #panel h1{margin-bottom:12px}
+    .pgrid{display:grid; grid-template-columns:1fr 1fr; column-gap:22px; align-items:start}
+    .pgrid > *{min-width:0}
+    .pgrid > .full{grid-column:1 / -1}
+  }
+  /* one narrow column again, or the panel would push the page wider than the screen */
+  @media (max-width:620px){
+    .pgrid{grid-template-columns:1fr}
+    #panel{max-height:52vh}
+  }
+  @media (max-width:560px){
+    .card{padding:8px 10px}
+    #hud{min-width:150px}
+    #hud .big{font-size:13px}
+    #setup{font-size:11px}
+    .g3{column-gap:11px}
+  }
+  /* phones: the two cards share the top row at half width each, so the plot
+     keeps most of the stage instead of hiding behind them */
+  @media (max-width:470px){
+    #panel{max-height:44vh}
+    .card{padding:6px 8px; border-radius:8px}
+    #hud{left:8px; right:auto; width:calc(50% - 15px); min-width:0}
+    #setup{right:8px; left:auto; width:calc(50% - 15px); font-size:9.5px; line-height:1.45}
+    #hud .r{font-size:10.5px; gap:4px}
+    #hud .r .v{white-space:nowrap}      /* "17.7 m/s" must not wrap onto two lines */
+    #hud .big{font-size:11.5px}
+    #hud hr{margin:4px 0}
+    .g3{column-gap:7px}
+    .g3 .c b{font-size:10.5px}
+    .ttl{font-size:9px; margin-bottom:3px}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+
+  <div class="card" id="hud">
+    <div class="r"><span class="k">t</span><span class="v t big" id="o-t">0.00 s</span></div>
+    <hr>
+    <div class="g2">
+      <div class="r"><span class="k">x</span><span class="v x" id="o-x">·</span></div>
+      <div class="r"><span class="k">v<sub>x</sub></span><span class="v x" id="o-vx">·</span></div>
+      <div class="r"><span class="k">y</span><span class="v y" id="o-y">·</span></div>
+      <div class="r"><span class="k">v<sub>y</sub></span><span class="v y" id="o-vy">·</span></div>
+      <div class="r"><span class="k">|v|</span><span class="v" id="o-v">·</span></div>
+    </div>
+    <hr>
+    <div class="g3">
+      <div class="c"><span class="k">T</span><b id="o-T">·</b></div>
+      <div class="c"><span class="k">H</span><b id="o-H">·</b></div>
+      <div class="c"><span class="k">R</span><b id="o-R">·</b></div>
+    </div>
+    <div id="o-kind"></div>
+  </div>
+
+  <div class="card" id="setup">
+    <div class="ttl">Set up</div>
+    <div class="l" id="s-ux">·</div>
+    <div class="l" id="s-uy">·</div>
+    <div class="l" id="s-ax">·</div>
+    <div class="l" id="s-ay">·</div>
+  </div>
+</div>
+
+<div id="panel">
+  <div id="dock">
+    <div class="tt"><span>Time</span><b id="d-t">0.00 s</b></div>
+    <div class="btns">
+      <button id="b-play">▶ Play</button>
+      <button id="b-step">⏭ Step</button>
+      <button id="b-reset">⏮ Reset</button>
+    </div>
+  </div>
+
+  <h1>Projectile Motion<span>pick a case, then set the launch</span></h1>
+
+  <div class="pgrid">
+  <div class="full">
+  <h2>Case</h2>
+  <div class="cases" id="modes">
+    <button class="case on" data-mode="gg">
+      <svg viewBox="0 0 30 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M2 20 Q15 -2 28 20" stroke-dasharray="3 3"/>
+        <path d="M1 20 H29" stroke-width="2.4"/>
+      </svg>
+      <span class="txt"><span class="cn">Ground → Ground</span>
+        <span class="cd">launch and land on the same level</span></span>
+    </button>
+    <button class="case" data-mode="height">
+      <svg viewBox="0 0 30 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M4 6 Q16 -3 26 14" stroke-dasharray="3 3"/>
+        <path d="M1 22 H29" stroke-width="2.4"/>
+        <path d="M1 6 H4 V22" /><path d="M22 14 H29" />
+      </svg>
+      <span class="txt"><span class="cn">From a height h₀ → h₁</span>
+        <span class="cd">tower to a draggable platform</span></span>
+    </button>
+    <button class="case" data-mode="incline">
+      <svg viewBox="0 0 30 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M3 21 Q13 2 26 9" stroke-dasharray="3 3"/>
+        <path d="M1 22 L29 8" stroke-width="2.4"/>
+      </svg>
+      <span class="txt"><span class="cn">Up an incline β</span>
+        <span class="cd">sloping ground, a splits into aₓ and aᵧ</span></span>
+    </button>
+  </div>
+  </div>
+
+  <div>
+  <h2>Launch</h2>
+  <div class="row"><label>u speed <b id="l-u">25 m/s</b></label>
+    <input type="range" id="i-u" min="5" max="50" step="1" value="25"></div>
+  <div class="row"><label>θ angle <b id="l-th">45°</b></label>
+    <input type="range" id="i-th" min="0" max="90" step="1" value="45"></div>
+  <div class="row hide" id="r-h0"><label>h₀ launch <b id="l-h0">25 m</b></label>
+    <input type="range" id="i-h0" min="0" max="60" step="1" value="25"></div>
+  <div class="row hide" id="r-h1"><label>h₁ landing <b id="l-h1">20 m</b></label>
+    <input type="range" id="i-h1" min="0" max="60" step="1" value="20"></div>
+  <div class="row hide" id="r-d"><label>d platform <b id="l-d">55 m</b></label>
+    <div class="note">drag the platform to move it</div></div>
+  <div class="row hide" id="r-be"><label>β incline <b id="l-be">20°</b></label>
+    <input type="range" id="i-be" min="-45" max="45" step="1" value="20"></div>
+
+  <h2>Gravity</h2>
+  <div class="row"><label>g <b id="l-g">9.8 m/s²</b></label>
+    <input type="range" id="i-g" min="1.6" max="25" step="0.1" value="9.8"></div>
+  </div>
+
+  <div>
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="c-comp" checked><i style="background:#22d3ee"></i> components x , y</label>
+  <label class="chk"><input type="checkbox" id="c-acc" checked><i style="background:#4ade80"></i> a = g</label>
+  <label class="chk"><input type="checkbox" id="c-launch" checked><i style="background:#ffffff"></i> u at launch + θ</label>
+  <label class="chk"><input type="checkbox" id="c-ghost" checked> predicted path</label>
+  <label class="chk"><input type="checkbox" id="c-trail" checked><i style="background:#ff7b72"></i> trail</label>
+  <label class="chk"><input type="checkbox" id="c-mark" checked> H &amp; R markers</label>
+  <label class="chk" id="w-twin"><input type="checkbox" id="c-twin"><i style="background:#a78bfa"></i> twin angle 90°−θ</label>
+  <label class="chk"><input type="checkbox" id="c-grid" checked> grid</label>
+
+  </div>
+
+  <div class="full">
+  <h2>Time</h2>
+  <div class="row"><label>scrub t <b id="l-sc">0.00 s</b></label>
+    <input type="range" id="i-sc" min="0" max="1000" step="1" value="0"></div>
+  <div class="row"><label>speed <b id="l-sp">0.3×</b></label>
+    <input type="range" id="i-sp" min="0.1" max="2" step="0.05" value="0.3"></div>
+  <label class="chk"><input type="checkbox" id="c-loop" checked> loop</label>
+  </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════ colours ══════════════════ */
+const COL = {
+  vel:'#ffffff', cx:'#22d3ee', cy:'#f472b6',
+  acc:'#4ade80', ax:'#a3e635', ay:'#2dd4bf',
+  trail:'#ff7b72', ghost:'#dfe9f2', twin:'#a78bfa', arc:'#ffd166',
+  ball:'#ffa657', ballEdge:'#ff7a18',
+  ground:'#1c2735', edge:'#4d5f76',
+  tower:'#2dd4bf', plat:'#fbbf24', slope:'#a78bfa',
+  grid:'#222e3d', axis:'#44546a', num:'#5c6d82'
+};
+
+/* ══════════════════ state ══════════════════ */
+const P = new URLSearchParams(location.search);
+const S = {
+  mode: ['gg','height','incline'].includes(P.get('mode')) ? P.get('mode') : 'gg',
+  u:25, th:45, g:9.8, h0:25, h1:20, be:20, d:55,
+  t:0, playing:false, speed:0.3, loop:true,
+  show:{ comp:true, acc:true, launch:true, ghost:true, trail:true, mark:true, twin:false, grid:true }
+};
+function fromURL(k, lo, hi){ const v = parseFloat(P.get(k)); if(isFinite(v)) S[k] = Math.min(hi, Math.max(lo, v)); }
+fromURL('u',5,50); fromURL('th',0,90); fromURL('g',1.6,25);
+fromURL('h0',0,60); fromURL('h1',0,60); fromURL('be',-45,45); fromURL('d',2,3000);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+/* ══════════════════ physics ══════════════════
+   One formulation for all three cases. Work in the launch frame (x′,y′) rotated
+   by the incline angle β, then rotate into world x,y for drawing.
+     T  from the y-displacement :  Δy = u_y t + ½ a_y t²
+     H  from                    :  v_y = 0
+     R  from the x-displacement :  R  = u_x T + ½ a_x T²
+══════════════════════════════════════════════ */
+function solve(u, thDeg, g, beDeg, dy){
+  const th = thDeg*Math.PI/180, be = beDeg*Math.PI/180;
+  const ux = u*Math.cos(th), uy = u*Math.sin(th);
+  const ax = -g*Math.sin(be), ay = -g*Math.cos(be);
+
+  const disc = uy*uy + 2*ay*dy;                 // ½a_y T² + u_y T − Δy = 0
+  let T = null, ok = true;
+  if(disc < 0) ok = false; else T = (-uy - Math.sqrt(disc))/ay;   // later positive root
+  if(T !== null && T <= 1e-9) T = 0;
+
+  const tH = -uy/ay;                            // v_y = 0
+  const H  = uy*tH + 0.5*ay*tH*tH;
+  const R  = T === null ? null : ux*T + 0.5*ax*T*T;
+  return { th, be, ux, uy, ax, ay, disc, T, tH, H, R, ok };
+}
+
+let D = {}, pathPts = [], twinPts = [];
+const NS = 240;
+
+// the landing platform is placed freely, so work out what the ball actually meets first:
+// its vertical face, its roof, or the ground (either short of it, or past it)
+function platW(){ return Math.max(8, 0.28*S.u*S.u/S.g); }
+function platRect(){ return { x:S.d, w:platW(), h:S.h1 }; }
+
+function recompute(){
+  const beDeg = S.mode === 'incline' ? S.be : 0;
+  const h0 = S.mode === 'height' ? S.h0 : 0;
+  let r, dy = 0, kind = 'plain';
+
+  if(S.mode === 'height'){
+    const g = S.g, th = S.th*Math.PI/180;
+    const ux = S.u*Math.cos(th), uy = S.u*Math.sin(th);
+    const ground = solve(S.u, S.th, g, 0, -h0);
+    const p = platRect();
+    r = ground; dy = -h0; kind = 'ground';
+
+    if(p.h > 0.01 && ux > 1e-6){
+      const tD = p.x/ux;                                  // reaches the near face here
+      const yD = h0 + uy*tD - 0.5*g*tD*tD;
+      if(tD < ground.T && yD >= 0){
+        if(yD <= p.h){                                    // strikes the vertical face
+          kind = 'side'; dy = yD - h0;
+          r = { ...ground, T:tD, R:p.x };
+        } else {
+          const top = solve(S.u, S.th, g, 0, p.h - h0);   // comes down onto the roof?
+          if(top.ok && top.R <= p.x + p.w){ kind = 'top'; dy = p.h - h0; r = top; }
+          else kind = 'over';                             // sails right over it
+        }
+      }
+    }
+  } else {
+    r = solve(S.u, S.th, S.g, beDeg, 0);
+  }
+
+  const be = beDeg*Math.PI/180;
+  D = { ...r, beDeg, h0, h1:S.h1, dy, kind, be,
+        ex:{x:Math.cos(be), y:Math.sin(be)}, ey:{x:-Math.sin(be), y:Math.cos(be)},
+        P0:{x:0, y:h0} };
+  D.Tsafe = (D.T === null || D.T < 1e-6) ? 0 : D.T;
+
+  pathPts = [];
+  for(let i = 0; i <= NS; i++) pathPts.push(posAt(D.Tsafe*i/NS));
+
+  twinPts = [];
+  if(S.mode === 'gg'){
+    const r2 = solve(S.u, 90 - S.th, S.g, 0, 0);
+    const T2 = (r2.T === null || r2.T < 1e-6) ? 0 : r2.T;
+    for(let i = 0; i <= NS; i++){
+      const t = T2*i/NS;
+      twinPts.push({ x:r2.ux*t, y:r2.uy*t + 0.5*r2.ay*t*t });
+    }
+  }
+}
+
+function posAt(t){
+  const sx = D.ux*t + 0.5*D.ax*t*t, sy = D.uy*t + 0.5*D.ay*t*t;
+  return { x: D.P0.x + D.ex.x*sx + D.ey.x*sy, y: D.P0.y + D.ex.y*sx + D.ey.y*sy };
+}
+const velAt = t => ({ vx: D.ux + D.ax*t, vy: D.uy + D.ay*t });
+function velWorld(t){
+  const v = velAt(t);
+  return { x: D.ex.x*v.vx + D.ey.x*v.vy, y: D.ex.y*v.vx + D.ey.y*v.vy };
+}
+
+/* ══════════════════ view: always fit the screen ══════════════════ */
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, K = 1, OX = 0, OY = 0;      // K = px per metre
+const sx = x => OX + x*K;
+const sy = y => OY - y*K;
+
+// the top inset clears the two floating cards, so the drawing can never hide behind them.
+// measured from the cards themselves, so it stays right on a phone, a tablet or a desktop
+const INS = { l:26, r:26, t:168, b:30 };
+function measureInsets(){
+  const stage = document.getElementById('stage');
+  const a = document.getElementById('hud'), b = document.getElementById('setup');
+  // On a narrow screen the two cards will not fit side by side, so the set-up
+  // card drops underneath the readout instead of sitting on top of it.
+  if(a && b && stage){
+    b.style.top = ''; b.style.left = ''; b.style.right = '';   // back to the CSS position
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    if(ra.right + 8 > rb.left){          // they would genuinely collide
+      b.style.top = (12 + a.offsetHeight + 8) + 'px';
+      b.style.left = '12px'; b.style.right = 'auto';
+    }
+    // clear whatever the cards actually occupy, in either arrangement
+    const st = stage.getBoundingClientRect();
+    let low = 0;
+    for(const el of [a,b]) low = Math.max(low, el.getBoundingClientRect().bottom - st.top);
+    if(low > 0) INS.t = low + 16;
+  }
+  INS.b = COARSE ? 34 : 30;
+}
+
+// fingers are blunter than a mouse pointer: a wider grab zone, and no hover state to chase
+const COARSE = matchMedia('(pointer:coarse)').matches;
+const GRAB = COARSE ? 18 : 7;
+
+function fitView(){
+  let x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+  const pts = pathPts.concat([{x:0,y:0}, D.P0]);
+  if(S.show.twin && S.mode === 'gg') pts.push(...twinPts);
+  for(const p of pts){
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+    y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+  }
+  if(S.mode === 'height' && S.h1 > 0){          // the platform must always stay on screen
+    const p = platRect();
+    y1 = Math.max(y1, p.h);
+    x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x + p.w);
+  }
+
+  // breathing room around the content, and always a strip of ground below
+  const spanX = Math.max(x1 - x0, 1), spanY = Math.max(y1 - y0, 1);
+  x0 -= spanX*0.10; x1 += spanX*0.10;
+  y1 += spanY*0.14;
+  y0 -= Math.max(spanY*0.16, spanX*0.05);
+
+  const availW = Math.max(50, W - INS.l - INS.r);
+  const availH = Math.max(50, H - INS.t - INS.b);
+  K = Math.min(availW/(x1 - x0), availH/(y1 - y0));
+  OX = INS.l + (availW - (x1 - x0)*K)/2 - x0*K;
+  OY = INS.t + (availH - (y1 - y0)*K)/2 + y1*K;
+}
+
+/* ── dragging the landing platform ── */
+let dragging = null, hoverPlat = false, freezeFit = false;
+
+function overPlat(mx, my){
+  if(S.mode !== 'height' || S.h1 <= 0.01) return false;
+  const p = platRect();
+  return mx >= sx(p.x) - GRAB && mx <= sx(p.x + p.w) + GRAB &&
+         my >= sy(p.h) - GRAB && my <= sy(0) + GRAB*0.5;
+}
+function localPt(e){
+  const r = cv.getBoundingClientRect();
+  return { mx: e.clientX - r.left, my: e.clientY - r.top };
+}
+
+cv.addEventListener('pointerdown', e => {
+  const { mx, my } = localPt(e);
+  if(!overPlat(mx, my)) return;
+  // grab offset in world units, so the block does not jump under the cursor
+  dragging = { ox: (mx - OX)/K - S.d, oy: (OY - my)/K - S.h1 };
+  freezeFit = true;                      // hold the view still while dragging
+  try { cv.setPointerCapture(e.pointerId); } catch(_){}
+  cv.style.cursor = 'grabbing';
+  e.preventDefault();
+});
+
+cv.addEventListener('pointermove', e => {
+  const { mx, my } = localPt(e);
+  if(dragging){
+    const maxD = (W - OX)/K - platW()*0.5;
+    S.d  = clamp((mx - OX)/K - dragging.ox, 2, Math.max(6, maxD));
+    S.h1 = clamp((OY - my)/K - dragging.oy, 1, 60);   // never drag it away to nothing
+    iH1.value = Math.round(S.h1);
+    $('l-h1').textContent = Math.round(S.h1) + ' m';
+    updateAll();
+  } else if(!COARSE){
+    const h = overPlat(mx, my);
+    if(h !== hoverPlat){ hoverPlat = h; cv.style.cursor = h ? 'grab' : ''; draw(); }
+  }
+});
+
+function endDrag(e){
+  if(!dragging) return;
+  dragging = null; freezeFit = false;
+  cv.style.cursor = hoverPlat ? 'grab' : '';
+  try { if(e && cv.hasPointerCapture(e.pointerId)) cv.releasePointerCapture(e.pointerId); } catch(_){}
+  fitView(); draw();                     // settle the view once the block is placed
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', endDrag);
+
+function resize(){
+  const dpr = window.devicePixelRatio || 1;
+  W = cv.clientWidth; H = cv.clientHeight;
+  if(cv.width !== W*dpr || cv.height !== H*dpr){ cv.width = W*dpr; cv.height = H*dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  measureInsets();
+  fitView();
+}
+new ResizeObserver(() => { resize(); draw(); }).observe(cv);
+
+/* ══════════════════ drawing helpers ══════════════════ */
+function niceStep(v){
+  for(const s of [0.5,1,2,5,10,20,25,50,100,200,500,1000]) if(v <= s) return s;
+  return 2000;
+}
+
+function arrow(x, y, dx, dy, col, wide){
+  const L = Math.hypot(dx, dy); if(L < 2) return false;
+  const ux = dx/L, uy = dy/L, hd = Math.min(15, L*0.42);
+  ctx.save();
+  ctx.strokeStyle = col; ctx.fillStyle = col;
+  ctx.lineWidth = wide ? 3.6 : 2.6; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx - ux*hd*0.9, y + dy - uy*hd*0.9); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x + dx, y + dy);
+  ctx.lineTo(x + dx - ux*hd - uy*hd*0.5, y + dy - uy*hd + ux*hd*0.5);
+  ctx.lineTo(x + dx - ux*hd + uy*hd*0.5, y + dy - uy*hd - ux*hd*0.5);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  return true;
+}
+
+// label pinned just past a point, with a dark backing plate so it stays readable
+function tag(x, y, txt, col, ox = 0, oy = 0, size = 15){
+  ctx.save();
+  ctx.font = `700 ${size}px ui-sans-serif,system-ui,sans-serif`;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
+  const w = ctx.measureText(txt).width;
+  const px = x + ox, py = y + oy;
+  ctx.fillStyle = 'rgba(10,13,18,.78)';
+  ctx.fillRect(px - w/2 - 4, py - size*0.62, w + 8, size*1.24);
+  ctx.fillStyle = col; ctx.fillText(txt, px, py);
+  ctx.restore();
+}
+
+function poly(pts, col, width, dash, alpha){
+  if(pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = col; ctx.lineWidth = width; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if(dash) ctx.setLineDash(dash);
+  if(alpha != null) ctx.globalAlpha = alpha;
+  ctx.beginPath(); ctx.moveTo(sx(pts[0].x), sy(pts[0].y));
+  for(let i = 1; i < pts.length; i++) ctx.lineTo(sx(pts[i].x), sy(pts[i].y));
+  ctx.stroke(); ctx.restore();
+}
+
+function arcAt(cx, cy, r, a0, a1, col){
+  ctx.save();
+  ctx.strokeStyle = col; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.arc(cx, cy, r, -a0, -a1, a1 > a0);   // screen y is flipped
+  ctx.stroke(); ctx.restore();
+}
+
+/* ── terrain: solid dark, everything below it is hidden ── */
+const groundY = x => (S.mode === 'incline' ? Math.tan(D.be)*x : 0);
+
+function terrainPath(){
+  const wx0 = (0 - OX)/K, wx1 = (W - OX)/K;
+  ctx.moveTo(sx(wx0), sy(groundY(wx0)));
+  ctx.lineTo(sx(wx1), sy(groundY(wx1)));
+  ctx.lineTo(W + 10, H + 10);
+  ctx.lineTo(-10, H + 10);
+  ctx.closePath();
+  if(S.mode === 'height'){
+    if(D.h0 > 0.01){ const w = towerW(); ctx.rect(sx(-w), sy(D.h0), w*K, D.h0*K); }
+    if(D.h1 > 0.01){ const p = platRect(); ctx.rect(sx(p.x), sy(p.h), p.w*K, p.h*K); }
+  }
+}
+function towerW(){ return Math.max(2, (D.h0 || 1)*0.28); }
+
+function drawTerrain(){
+  ctx.save();
+  ctx.beginPath(); terrainPath();
+  ctx.fillStyle = COL.ground; ctx.fill();
+  ctx.restore();
+
+  // top edges, coloured so each piece still reads
+  const wx0 = (0 - OX)/K, wx1 = (W - OX)/K;
+  poly([{x:wx0, y:groundY(wx0)}, {x:wx1, y:groundY(wx1)}],
+       S.mode === 'incline' ? COL.slope : COL.edge, S.mode === 'incline' ? 3 : 2.2);
+
+  if(S.mode === 'height'){
+    if(D.h0 > 0.01){
+      const w = towerW();
+      poly([{x:-w, y:0}, {x:-w, y:D.h0}, {x:0, y:D.h0}, {x:0, y:0}], COL.tower, 2.4);
+    }
+    if(D.h1 > 0.01){
+      const p = platRect();
+      poly([{x:p.x, y:0}, {x:p.x, y:p.h}, {x:p.x + p.w, y:p.h}, {x:p.x + p.w, y:0}],
+           hoverPlat || dragging ? '#ffd97a' : COL.plat, hoverPlat || dragging ? 3.2 : 2.4);
+      // grip dots, a quiet hint that this block can be dragged
+      ctx.save();
+      ctx.fillStyle = hoverPlat || dragging ? '#ffd97a' : COL.plat;
+      const cx = sx(p.x + p.w/2), cy = sy(p.h) + 13;
+      for(const o of [-7, 0, 7]){ ctx.beginPath(); ctx.arc(cx + o, cy, 1.6, 0, 7); ctx.fill(); }
+      ctx.restore();
+    }
+  }
+}
+
+/* ── graph-paper grid, x and y ── */
+function drawGrid(){
+  if(!S.show.grid) return;
+  const step = niceStep(Math.max(W, H)/K/14);
+  const wx0 = (0 - OX)/K, wx1 = (W - OX)/K;
+  const wy0 = (H - OY)/-K, wy1 = (0 - OY)/-K;
+  ctx.save();
+  ctx.lineWidth = 1;
+  for(let x = Math.ceil(wx0/step)*step; x <= wx1; x += step){
+    ctx.strokeStyle = Math.abs(x) < step*0.01 ? COL.axis : COL.grid;
+    ctx.beginPath(); ctx.moveTo(sx(x), 0); ctx.lineTo(sx(x), H); ctx.stroke();
+  }
+  for(let y = Math.ceil(wy0/step)*step; y <= wy1; y += step){
+    ctx.strokeStyle = Math.abs(y) < step*0.01 ? COL.axis : COL.grid;
+    ctx.beginPath(); ctx.moveTo(0, sy(y)); ctx.lineTo(W, sy(y)); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// numbers go on after the terrain, otherwise the solid ground paints over them
+function drawGridNumbers(){
+  if(!S.show.grid) return;
+  const step = niceStep(Math.max(W, H)/K/14);
+  const wx0 = (0 - OX)/K, wx1 = (W - OX)/K;
+  const wy0 = (H - OY)/-K, wy1 = (0 - OY)/-K;
+  ctx.save();
+  ctx.font = '600 10.5px ui-sans-serif,system-ui,sans-serif';
+  ctx.fillStyle = COL.num;
+
+  const yLab = S.mode === 'incline' ? H - 6 : Math.min(H - 6, sy(0) + 16);
+  ctx.textAlign = 'center'; ctx.textBaseline = S.mode === 'incline' ? 'bottom' : 'top';
+  for(let x = Math.ceil(wx0/step)*step; x <= wx1; x += step)
+    if(Math.abs(x) >= step*0.01) ctx.fillText(x, sx(x), yLab);
+
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for(let y = Math.ceil(wy0/step)*step; y <= wy1; y += step)
+    if(Math.abs(y) >= step*0.01) ctx.fillText(y, W - 7, sy(y));
+  ctx.restore();
+}
+
+/* ══════════════════ main draw ══════════════════ */
+function draw(){
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#0a0d12';
+  ctx.fillRect(0, 0, W, H);
+
+  drawGrid();
+
+  const t = S.t, T = D.Tsafe;
+  const p = posAt(t), v = velAt(t), vw = velWorld(t);
+  const kv = 0.17*Math.min(W, H)/Math.max(1e-6, S.u);   // px per (m/s)
+  const ka = 0.12*Math.min(W, H)/Math.max(1e-6, S.g);   // px per (m/s²)
+  const sh = S.show;
+
+  if(sh.twin && S.mode === 'gg') poly(twinPts, COL.twin, 2, [7,6], 0.6);
+  if(sh.ghost) poly(pathPts, COL.ghost, 1.8, [6,6], 0.45);
+  if(sh.trail && T > 0){
+    const k = Math.max(1, Math.min(NS, Math.floor(t/T*NS)));
+    poly(pathPts.slice(0, k).concat([p]), COL.trail, 3.4);
+  }
+
+  // ---- markers ----
+  const showMark = sh.mark && T > 0;
+  if(showMark && D.tH > 1e-6 && D.tH < T - 1e-6){
+    const pa = posAt(D.tH);
+    const base = { x: pa.x - D.ey.x*D.H, y: pa.y - D.ey.y*D.H };
+    poly([pa, base], COL.cy, 1.8, [6,5], 0.85);
+    ctx.save(); ctx.strokeStyle = COL.cy; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(sx(pa.x), sy(pa.y), 8, 0, 7); ctx.stroke(); ctx.restore();
+    tag((sx(pa.x) + sx(base.x))/2, (sy(pa.y) + sy(base.y))/2, 'H', COL.cy, 16, 0, 16);
+  }
+  if(showMark && D.R !== null){
+    const pe = posAt(T), b1 = { x: D.P0.x + D.ex.x*D.R, y: D.P0.y + D.ex.y*D.R };
+    poly([D.P0, b1], COL.cx, 1.8, [6,5], 0.85);
+    ctx.save(); ctx.strokeStyle = COL.cx; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.arc(sx(pe.x), sy(pe.y), 8, 0, 7); ctx.stroke(); ctx.restore();
+    tag((sx(D.P0.x) + sx(b1.x))/2, (sy(D.P0.y) + sy(b1.y))/2, 'R', COL.cx, 0, -16, 16);
+  }
+
+  // terrain goes on after the paths and markers, so a solid block hides whatever
+  // passes behind it instead of the R line drawing straight through the platform
+  drawTerrain();
+  drawGridNumbers();
+
+  // ---- launch vectors ----
+  const X0 = sx(D.P0.x), Y0 = sy(D.P0.y);
+  if(sh.launch){
+    const ax_ = D.ex.x*D.ux*kv, ay_ = -(D.ex.y*D.ux*kv);
+    const bx_ = D.ey.x*D.uy*kv, by_ = -(D.ey.y*D.uy*kv);
+    const ux_ = ax_ + bx_, uy_ = ay_ + by_;
+    if(sh.comp){
+      poly2(X0 + ax_, Y0 + ay_, X0 + ux_, Y0 + uy_);
+      poly2(X0 + bx_, Y0 + by_, X0 + ux_, Y0 + uy_);
+      if(arrow(X0, Y0, ax_, ay_, COL.cx)) tag(X0 + ax_, Y0 + ay_, 'uₓ', COL.cx, 0, 18);
+      if(arrow(X0, Y0, bx_, by_, COL.cy)) tag(X0 + bx_, Y0 + by_, 'uᵧ', COL.cy, -20, 0);
+    }
+    if(arrow(X0, Y0, ux_, uy_, COL.vel, true)) tag(X0 + ux_, Y0 + uy_, 'u', COL.vel, 0, -17, 17);
+    const rTh = Math.min(W, H)*0.11;
+    arcAt(X0, Y0, rTh, D.be, D.be + D.th, COL.arc);
+    tag(X0 + Math.cos(D.be + D.th/2)*rTh*1.25, Y0 - Math.sin(D.be + D.th/2)*rTh*1.25, 'θ', COL.arc, 0, 0, 16);
+  }
+
+  // ---- β angle on the incline ----
+  if(S.mode === 'incline' && Math.abs(D.beDeg) > 0.5){
+    const r = Math.min(W, H)*0.24;
+    poly([{x:0, y:0}, {x:(r*1.15)/K, y:0}], COL.arc, 1.6, [6,5], 0.5);
+    arcAt(sx(0), sy(0), r, 0, D.be, COL.arc);
+    tag(sx(0) + Math.cos(D.be/2)*r*1.13, sy(0) - Math.sin(D.be/2)*r*1.13, 'β', COL.arc, 0, 0, 16);
+  }
+
+  // ---- moving vectors ----
+  const BX = sx(p.x), BY = sy(p.y);
+  const vax = D.ex.x*v.vx*kv, vay = -(D.ex.y*v.vx*kv);
+  const vbx = D.ey.x*v.vy*kv, vby = -(D.ey.y*v.vy*kv);
+  if(sh.comp){
+    poly2(BX + vax, BY + vay, BX + vax + vbx, BY + vay + vby);
+    poly2(BX + vbx, BY + vby, BX + vax + vbx, BY + vay + vby);
+    if(arrow(BX, BY, vax, vay, COL.cx)) tag(BX + vax, BY + vay, 'vₓ', COL.cx, 0, 18);
+    if(arrow(BX, BY, vbx, vby, COL.cy)) tag(BX + vbx, BY + vby, 'vᵧ', COL.cy, -20, 0);
+  }
+  if(arrow(BX, BY, vax + vbx, vay + vby, COL.vel, true))
+    tag(BX + vax + vbx, BY + vay + vby, 'v', COL.vel, 0, -17, 17);
+
+  // ---- acceleration ----
+  if(sh.acc){
+    if(arrow(BX, BY, 0, S.g*ka, COL.acc, true)) tag(BX, BY + S.g*ka, 'a = g', COL.acc, 0, 18, 15);
+    if(S.mode === 'incline' && Math.abs(D.beDeg) > 0.5){
+      const gax = D.ex.x*D.ax*ka, gay = -(D.ex.y*D.ax*ka);
+      const gbx = D.ey.x*D.ay*ka, gby = -(D.ey.y*D.ay*ka);
+      if(arrow(BX, BY, gax, gay, COL.ax)) tag(BX + gax, BY + gay, 'aₓ', COL.ax, 0, -16);
+      if(arrow(BX, BY, gbx, gby, COL.ay)) tag(BX + gbx, BY + gby, 'aᵧ', COL.ay, -22, 0);
+    }
+  }
+
+  // ---- ball, drawn last so it is never hidden ----
+  const rB = Math.max(6, Math.min(W, H)*0.014);
+  ctx.save();
+  ctx.fillStyle = COL.ball; ctx.strokeStyle = COL.ballEdge; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(BX, BY, rB, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  updateReadouts(t, p, v, vw);
+}
+
+// thin dashed connector for the component rectangle
+function poly2(x1, y1, x2, y2){
+  ctx.save();
+  ctx.strokeStyle = '#5b6a7d'; ctx.lineWidth = 1.2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.restore();
+}
+
+/* ══════════════════ readouts ══════════════════ */
+const $ = id => document.getElementById(id);
+const f1 = x => x.toFixed(1), f2 = x => x.toFixed(2);
+
+function updateReadouts(t, p, v, vw){
+  const dx = p.x - D.P0.x, dy = p.y - D.P0.y;
+  $('o-t').textContent  = f2(t) + ' s';
+  $('o-x').textContent  = f1(dx*D.ex.x + dy*D.ex.y) + ' m';
+  $('o-y').textContent  = f1(dx*D.ey.x + dy*D.ey.y) + ' m';
+  $('o-vx').textContent = f1(v.vx) + ' m/s';
+  $('o-vy').textContent = f1(v.vy) + ' m/s';
+  $('o-v').textContent  = f1(Math.hypot(vw.x, vw.y)) + ' m/s';
+
+  $('o-T').textContent = D.T === null ? '·' : f2(D.T) + ' s';
+  $('o-H').textContent = D.tH <= 1e-6 ? '0 m' : f2(D.H) + ' m';
+  $('o-R').textContent = D.R === null ? '·' : f2(D.R) + ' m';
+
+  const KIND = { top:'✓ lands on the platform', side:'✗ hits the wall',
+                 over:'→ clears the platform', ground:'lands on the ground' };
+  const el = $('o-kind');
+  const show = S.mode === 'height' && S.h1 > 0.01;
+  el.className = show ? D.kind : 'hide';
+  el.textContent = show ? KIND[D.kind] : '';
+}
+
+function updateSetup(){
+  $('l-d').textContent = Math.round(S.d) + ' m';
+  $('s-ux').innerHTML = `uₓ = ${S.u}·cos${S.th}° = <span class="n">${f2(D.ux)}</span>`;
+  $('s-uy').innerHTML = `uᵧ = ${S.u}·sin${S.th}° = <span class="m">${f2(D.uy)}</span>`;
+  $('s-ax').innerHTML = `aₓ = −g·sin${D.beDeg}° = <span class="g">${f2(D.ax)}</span>`;
+  $('s-ay').innerHTML = `aᵧ = −g·cos${D.beDeg}° = <span class="g">${f2(D.ay)}</span>`;
+}
+
+/* ══════════════════ wiring ══════════════════ */
+function updateAll(){
+  recompute();
+  measureInsets();
+  if(!freezeFit) fitView();
+  updateSetup();
+  S.t = D.Tsafe > 0 ? Math.min(S.t, D.Tsafe) : 0;
+  syncScrub();
+  draw();
+}
+
+function bind(id, lab, fmt, set){
+  const el = $(id), out = $(lab);
+  const h = () => { const v = parseFloat(el.value); out.textContent = fmt(v); set(v); };
+  el.addEventListener('input', h);
+  return el;
+}
+const iU  = bind('i-u','l-u',  v => v + ' m/s',        v => { S.u = v;  updateAll(); });
+const iTh = bind('i-th','l-th',v => v + '°',           v => { S.th = v; updateAll(); });
+const iH0 = bind('i-h0','l-h0',v => v + ' m',          v => { S.h0 = v; updateAll(); });
+const iH1 = bind('i-h1','l-h1',v => v + ' m',          v => { S.h1 = v; updateAll(); });
+const iBe = bind('i-be','l-be',v => v + '°',           v => { S.be = v; updateAll(); });
+const iG  = bind('i-g','l-g',  v => v.toFixed(1) + ' m/s²', v => { S.g = v; updateAll(); });
+bind('i-sp','l-sp', v => v.toFixed(1) + '×', v => { S.speed = v; });
+
+const scrub = $('i-sc');
+scrub.addEventListener('input', () => {
+  S.t = D.Tsafe*parseFloat(scrub.value)/1000;
+  $('l-sc').textContent = f2(S.t) + ' s';
+  $('d-t').textContent = f2(S.t) + ' s';
+  draw();
+});
+function syncScrub(){
+  scrub.value = D.Tsafe > 0 ? Math.round(S.t/D.Tsafe*1000) : 0;
+  $('l-sc').textContent = f2(S.t) + ' s';
+  $('d-t').textContent = f2(S.t) + ' s';
+}
+
+function setMode(m){
+  S.mode = m;
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  $('r-h0').classList.toggle('hide', m !== 'height');
+  $('r-h1').classList.toggle('hide', m !== 'height');
+  $('r-d').classList.toggle('hide', m !== 'height');
+  if(m !== 'height'){ hoverPlat = false; cv.style.cursor = ''; }
+  $('r-be').classList.toggle('hide', m !== 'incline');
+  $('w-twin').classList.toggle('hide', m !== 'gg');
+  S.t = 0;
+  updateAll();
+}
+document.querySelectorAll('#modes button').forEach(b =>
+  b.addEventListener('click', () => setMode(b.dataset.mode)));
+
+for(const [id, key] of Object.entries({ 'c-comp':'comp','c-acc':'acc','c-launch':'launch',
+    'c-ghost':'ghost','c-trail':'trail','c-mark':'mark','c-twin':'twin','c-grid':'grid' })){
+  $(id).addEventListener('change', e => { S.show[key] = e.target.checked; fitView(); draw(); });
+}
+$('c-loop').addEventListener('change', e => { S.loop = e.target.checked; });
+
+const playBtn = $('b-play');
+function setPlaying(p){
+  S.playing = p;
+  playBtn.textContent = p ? '⏸ Pause' : '▶ Play';
+  playBtn.classList.toggle('on', p);
+}
+playBtn.addEventListener('click', () => {
+  if(!S.playing && D.Tsafe > 0 && S.t >= D.Tsafe - 1e-6) S.t = 0;
+  setPlaying(!S.playing);
+});
+$('b-step').addEventListener('click', () => {
+  setPlaying(false);
+  S.t = Math.min(D.Tsafe, S.t + Math.max(0.02, D.Tsafe/40));
+  syncScrub(); draw();
+});
+$('b-reset').addEventListener('click', () => { setPlaying(false); S.t = 0; syncScrub(); draw(); });
+
+window.addEventListener('keydown', e => {
+  if(e.target.tagName === 'INPUT') return;
+  if(e.code === 'Space'){ e.preventDefault(); playBtn.click(); }
+  if(e.code === 'KeyR') $('b-reset').click();
+  if(e.code === 'ArrowRight') $('b-step').click();
+});
+
+/* ══════════════════ loop ══════════════════ */
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  if(S.playing){
+    const T = D.Tsafe;
+    if(T <= 0) setPlaying(false);
+    else {
+      S.t += dt*S.speed;
+      if(S.t >= T){ if(S.loop) S.t = 0; else { S.t = T; setPlaying(false); } }
+      syncScrub(); draw();
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ══════════════════ go ══════════════════ */
+for(const [el, v] of [[iU,S.u],[iTh,S.th],[iG,S.g],[iH0,S.h0],[iH1,S.h1],[iBe,S.be]]){
+  el.value = v; el.dispatchEvent(new Event('input'));
+}
+resize();
+setMode(S.mode);
+if(P.get('play') === '1') setPlaying(true);
+requestAnimationFrame(frame);
+
+// self-check against hand calculation
+(function(){
+  const cases = [
+    ['flat  u=20 θ=45 g=9.8', solve(20,45,9.8,0,0),   {T:2.8862, H:10.2041, R:40.8163}],
+    ['cliff u=20 θ=0  h=20 ', solve(20,0,9.8,0,-20),  {T:2.0203, H:0,       R:40.4061}],
+    ['slope u=20 θ=30 β=15 ', solve(20,30,9.8,15,0),  {T:2.1128, H:5.2820,  R:30.9341}]
+  ];
+  for(const [n, r, e] of cases){
+    const ok = Math.abs(r.T-e.T) < 5e-3 && Math.abs(r.H-e.H) < 5e-3 && Math.abs(r.R-e.R) < 5e-3;
+    console.log(`[check] ${n}  T=${r.T.toFixed(3)} H=${r.H.toFixed(3)} R=${r.R.toFixed(3)}  ${ok ? 'OK' : 'MISMATCH'}`);
+  }
+})();
+</script>
+</body>
+</html>

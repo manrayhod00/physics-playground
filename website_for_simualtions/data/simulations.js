@@ -14,7 +14,7 @@
    Put the string 'all' instead of the list to publish everything again:
        const PUBLISHED = 'all';
    ------------------------------------------------------------------------- */
-const PUBLISHED = ['magnets-grade-10'];
+const PUBLISHED = ['magnets-grade-10', 'projectile-motion'];
 
 const TOPICS = [
   { id: 'mechanics',      name: 'Mechanics',      emoji: '⚙️', color: '#ff7a59',
@@ -35,6 +35,13 @@ const TOPICS = [
 
 const SIMS = [
   /* ---------------- MECHANICS ---------------- */
+  { id: 'projectile-motion', topic: 'mechanics', title: 'Projectile Motion',
+    blurb: 'One arc, two independent motions. Set the launch and watch.',
+    story: 'Horizontal motion is steady, vertical motion is pulled by gravity, and together they draw the arc. Choose a case (level ground, a tower down to a platform, or a slope), set the speed and angle, then scrub through the flight and read T, H and R straight off the picture. Turn on the components, the twin angle and the predicted path to see why 30° and 60° land in the same place.',
+    path: '../projectile_motion/index.html',
+    thumb: '',
+    youtube: '' },
+
   { id: 'friction-lab', topic: 'mechanics', title: 'Friction Lab',
     blurb: 'Friction always opposes RELATIVE motion. See it in action.',
     story: 'Push a block, tilt the surface, change the grip. Watch how friction is never a fixed number, it grows and shrinks to fight relative sliding, right up until things break loose.',
