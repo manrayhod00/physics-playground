@@ -23,7 +23,7 @@ You never edit HTML. Add a few lines to that file, refresh the page, done. This 
 Paste this inside the `SIMS = [ ... ]` list (add a comma after the entry above it):
 
 ```js
-{ id: 'my-sim-id', topic: 'mechanics', title: 'My Simulation Title',
+{ id: 'my-sim-id', topic: 'mechanics', grade: 11, title: 'My Simulation Title',
   blurb: 'One short line shown on the card.',
   story: 'A friendly paragraph shown on the simulation\'s page. Explain what to try.',
   path: '../folder_name/my_sim.html',
@@ -37,6 +37,7 @@ Then fill in each field:
 |-------|-------------|-------|
 | `id` | A unique short name, lowercase-with-dashes, e.g. `'wave-motion'` | **Must be unique.** This becomes the page link `sim.html?id=wave-motion`. |
 | `topic` | Which topic group it belongs to | **Must match** one of the topic IDs listed below. |
+| `grade` | `10`, `11` or `12` | Which grade dropdown it lands in. A number, no quotes. |
 | `title` | The name students see | e.g. `'Wave Motion'` |
 | `blurb` | One-line teaser on the card | Keep it under ~12 words. |
 | `story` | A paragraph on the sim's own page | Explain what to explore. Optional, if blank, the blurb is used. |
@@ -61,6 +62,39 @@ Use one of these exact values for `topic`:
 | `optics` | 🔭 Optics |
 
 Want a **brand-new topic** (e.g. "Waves")? See the last section.
+
+---
+
+## 🎓 Grades: the top level of the site
+
+The home page shows one dropdown per grade, and each grade holds the topic
+groups that have something in it. A simulation picks its grade with `grade:`.
+
+| `grade` value | Shows under |
+|---------------|-------------|
+| `10` | GRADE 10 |
+| `11` | GRADE 11 |
+| `12` | GRADE 12 |
+
+The same topic may appear under more than one grade (Mechanics in Grade 11 and
+Grade 12, say) — each grade only lists its own simulations. A grade with nothing
+published still shows, saying its simulations are on the way.
+
+---
+
+## 🧹 After publishing: bump the cache version
+
+Browsers hold on to `simulations.js` for a while, so a freshly published
+simulation can be invisible for several minutes. Every local script and
+stylesheet is loaded with a `?v=...` tag:
+
+```html
+<script src="data/simulations.js?v=2026-07-26a"></script>
+```
+
+**When you publish, change that tag to today's date** (in both `index.html`
+and `sim.html`, all references). Every reader then gets the new manifest
+immediately instead of yesterday's copy.
 
 ---
 
