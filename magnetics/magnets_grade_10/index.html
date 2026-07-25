@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Magnet Magic: Explore Magnetism</title>
+<style>
+  :root{
+    --bg1:#0b1020; --bg2:#131a2e;
+    --n:#ff4d5e; --s:#4d8bff;
+    --field:#35e0d0; --fil:#c7d0e0; --cur:#ffd23f;
+    --ink:#e8eefc; --dim:#8b97b8; --panel:#1a2238;
+  }
+  *{box-sizing:border-box; -webkit-user-select:none; user-select:none;}
+  html,body{margin:0;height:100%;overflow:hidden;
+    font-family:"Segoe UI Variable","Segoe UI",system-ui,Arial,sans-serif;
+    background:radial-gradient(circle at 50% 35%,var(--bg2),var(--bg1) 80%);color:var(--ink);}
+  #app{display:flex;flex-direction:column;height:100%;}
+
+  /* ---- Top tab bar ---- */
+  #tabs{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;
+    padding:14px 12px 8px;}
+  .tab{display:flex;align-items:center;gap:8px;cursor:pointer;
+    border:none;border-radius:16px;padding:12px 20px;
+    font-size:18px;font-weight:600;color:var(--dim);
+    background:var(--panel);transition:.2s transform,.2s box-shadow,.2s color;}
+  .tab .em{font-size:24px;line-height:1;}
+  .tab:hover{transform:translateY(-2px);color:var(--ink);}
+  .tab.active{color:#fff;transform:translateY(-2px);}
+  .tab.active[data-c="t1"]{box-shadow:0 0 0 2px var(--field),0 8px 24px -6px var(--field);}
+  .tab.active[data-c="t2"]{box-shadow:0 0 0 2px var(--n),0 8px 24px -6px var(--n);}
+  .tab.active[data-c="t3"]{box-shadow:0 0 0 2px var(--fil),0 8px 24px -6px rgba(199,208,224,.5);}
+  .tab.active[data-c="t4"]{box-shadow:0 0 0 2px var(--cur),0 8px 24px -6px var(--cur);}
+  .tab.active[data-c="t5"]{box-shadow:0 0 0 2px #4bd07a,0 8px 24px -6px #4bd07a;}
+  .tab.active[data-c="t6"]{box-shadow:0 0 0 2px #b98cff,0 8px 24px -6px #b98cff;}
+  .tab.active[data-c="t7"]{box-shadow:0 0 0 2px #ff9f43,0 8px 24px -6px #ff9f43;}
+
+  /* ---- Stage ---- */
+  #stage{position:relative;flex:1;min-height:0;}
+  canvas{display:block;width:100%;height:100%;cursor:grab;}
+  canvas.grabbing{cursor:grabbing;}
+
+  /* ---- Floating controls ---- */
+  #hint{position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    font-size:20px;font-weight:600;color:var(--ink);
+    background:rgba(20,26,46,.6);padding:8px 18px;border-radius:20px;
+    backdrop-filter:blur(4px);pointer-events:none;white-space:nowrap;}
+  #controls{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+    display:flex;gap:12px;flex-wrap:wrap;justify-content:center;}
+  .ctl{cursor:pointer;border:none;border-radius:14px;padding:12px 20px;
+    font-size:17px;font-weight:600;color:var(--ink);background:var(--panel);
+    box-shadow:0 4px 14px -6px #000;transition:.15s transform,.2s background;}
+  .ctl:hover{transform:translateY(-2px);}
+  .ctl:active{transform:translateY(0);}
+  .ctl.on{background:linear-gradient(180deg,#ffdd55,#f0a92e);color:#2a1e00;}
+  .seg{display:flex;background:var(--panel);border-radius:14px;overflow:hidden;
+    box-shadow:0 4px 14px -6px #000;}
+  .seg button{border:none;background:transparent;color:var(--dim);cursor:pointer;
+    font-size:17px;font-weight:600;padding:12px 20px;transition:.2s;}
+  .seg button.sel{background:#2b3556;color:#fff;}
+  .hidden{display:none !important;}
+
+  #fs{position:absolute;top:12px;right:14px;z-index:5;cursor:pointer;
+    border:none;border-radius:12px;padding:10px 14px;font-size:20px;line-height:1;
+    color:var(--ink);background:var(--panel);box-shadow:0 4px 14px -6px #000;
+    transition:.15s transform;}
+  #fs:hover{transform:translateY(-2px);}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="tabs">
+    <button class="tab active" data-c="t1" data-tab="0"><span class="em">🧭</span>Compass</button>
+    <button class="tab" data-c="t2" data-tab="1"><span class="em">🧲</span>Two Magnets</button>
+    <button class="tab" data-c="t3" data-tab="2"><span class="em">✨</span>Iron Filings</button>
+    <button class="tab" data-c="t4" data-tab="3"><span class="em">⚡</span>Current</button>
+    <button class="tab" data-c="t5" data-tab="4"><span class="em">🌍</span>Earth</button>
+    <button class="tab" data-c="t6" data-tab="5"><span class="em">✂️</span>Cut Magnet</button>
+    <button class="tab" data-c="t7" data-tab="6"><span class="em">🔁</span>Coil</button>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <button id="fs" title="Full screen">⛶</button>
+    <div id="hint"></div>
+    <div id="controls"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const hintEl = document.getElementById('hint');
+const controlsEl = document.getElementById('controls');
+let W = 0, H = 0, DPR = 1;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * DPR);
+  cv.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  layoutScene();
+}
+window.addEventListener('resize', resize);
+
+/* ============ shared physics ============ */
+// A "pole" source: {x,y,q}  q>0 = North (red), q<0 = South (blue)
+function fieldAt(px, py, sources){
+  let bx = 0, by = 0;
+  for(const s of sources){
+    let dx = px - s.x, dy = py - s.y;
+    let r2 = dx*dx + dy*dy;
+    let r = Math.sqrt(r2);
+    const MIN = 14;
+    if(r < MIN){ r = MIN; r2 = MIN*MIN; }
+    const inv = s.q / (r2 * r); // q * r_hat / r^2
+    bx += dx * inv;
+    by += dy * inv;
+  }
+  return [bx, by];
+}
+function lerpAngle(a, b, t){
+  let d = ((b - a + Math.PI) % (2*Math.PI)) - Math.PI;
+  if(d < -Math.PI) d += 2*Math.PI;
+  return a + d * t;
+}
+function clamp(v,a,b){ return v<a?a:v>b?b:v; }
+
+/* ============ bar magnet drawing ============ */
+// magnet: {x,y,angle,len,flip}   flip=false => N(red) on the +axis end
+function magnetPoles(m){
+  const half = m.len/2 * 0.82;
+  const dx = Math.cos(m.angle)*half, dy = Math.sin(m.angle)*half;
+  const q = 40000;
+  // "positive end" is +axis; flip swaps which end is N
+  const nSign = m.flip ? -1 : 1;
+  return [
+    {x:m.x+dx, y:m.y+dy, q:  q*nSign},
+    {x:m.x-dx, y:m.y-dy, q: -q*nSign}
+  ];
+}
+function drawMagnet(m){
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(m.angle);
+  const w = m.len, h = m.len*0.32, rad = h*0.28;
+  const leftIsN = !m.flip; // +axis end is right side after rotate
+  // body: two halves
+  roundRectPath(-w/2, -h/2, w, h, rad);
+  ctx.clip();
+  // left half
+  ctx.fillStyle = leftIsN ? getc('--s') : getc('--n');
+  ctx.fillRect(-w/2, -h/2, w/2, h);
+  // right half
+  ctx.fillStyle = leftIsN ? getc('--n') : getc('--s');
+  ctx.fillRect(0, -h/2, w/2, h);
+  // gloss
+  ctx.fillStyle = 'rgba(255,255,255,.10)';
+  ctx.fillRect(-w/2, -h/2, w, h*0.34);
+  ctx.restore();
+  // outline + letters
+  ctx.save();
+  ctx.translate(m.x, m.y);
+  ctx.rotate(m.angle);
+  ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.25)';
+  roundRectPath(-w/2, -h/2, w, h, rad); ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.font = `bold ${h*0.6}px system-ui`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const rightLetter = leftIsN ? 'N' : 'S';
+  const leftLetter  = leftIsN ? 'S' : 'N';
+  drawUprightLetter(leftLetter, -w*0.30, 0, m.angle);
+  drawUprightLetter(rightLetter, w*0.30, 0, m.angle);
+  ctx.restore();
+}
+function drawUprightLetter(ch, lx, ly, ang){
+  ctx.save(); ctx.translate(lx, ly); ctx.rotate(-ang);
+  ctx.fillText(ch, 0, 1); ctx.restore();
+}
+function roundRectPath(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function getc(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function background(){
+  ctx.clearRect(0,0,W,H);
+}
+
+/* ============ arrow helper ============ */
+function arrow(x1,y1,x2,y2,color,width){
+  const a = Math.atan2(y2-y1, x2-x1);
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  ctx.lineWidth = width; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const hl = width*3.2;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hl*Math.cos(a-0.4), y2-hl*Math.sin(a-0.4));
+  ctx.lineTo(x2-hl*Math.cos(a+0.4), y2-hl*Math.sin(a+0.4));
+  ctx.closePath(); ctx.fill();
+}
+
+/* ==================================================================
+   STATE
+================================================================== */
+let activeTab = 0;
+let drag = null;      // {kind, ref, ox, oy}
+const mouse = {x:0, y:0, down:false};
+
+const state = {
+  // scene 1
+  s1: { magnet:{x:0,y:0,angle:0,len:160,flip:false}, compass:{x:0,y:0,ang:0}, showField:true },
+  // scene 2
+  s2: {
+    a:{x:0,y:0,angle:0,len:150,flip:false,vx:0,vy:0},
+    b:{x:0,y:0,angle:0,len:150,flip:true,vx:0,vy:0}
+  },
+  // scene 3
+  s3: { mode:'bar', magnet:{x:0,y:0,angle:0,len:170,flip:false}, pole:{x:0,y:0,q:60000}, filings:[], snap:0 },
+  // scene 4
+  s4: { wire:{x:0,y:0}, on:true, dir:1, filings:[], flow:0, strength:0, compass:{x:0,y:0,ang:0} },
+  // scene 5: Earth
+  s5: { cx:0, cy:0, R:0, spin:0, axialTilt:0.41, magTilt:0.30, spinning:true,
+        showField:true, compass:{x:0,y:0,ang:0}, continents:[] },
+  // scene 6: cut into pieces
+  s6: { cx:0, cy:0, n:1, gap:0, baseLen:340, h:70, pulse:0 },
+  // scene 7: current loop / coil
+  s7: { cx:0, cy:0, Rr:0, yaw:0.6, pitch:0.5, dir:1, showField:true, flow:0, compass:{x:0,y:0,ang:0} }
+};
+
+/* ============ layout on resize / tab switch ============ */
+function layoutScene(){
+  const cx = W/2, cy = H/2;
+  // s1
+  state.s1.magnet.x = cx; state.s1.magnet.y = cy;
+  if(!state.s1._init){ state.s1.compass.x = cx + 200; state.s1.compass.y = cy - 120; state.s1._init=true; }
+  // s2
+  if(!state.s2._init){
+    state.s2.a.x = cx - 170; state.s2.a.y = cy;
+    state.s2.b.x = cx + 170; state.s2.b.y = cy;
+    state.s2._init = true;
+  }
+  // s3
+  if(!state.s3._init){ state.s3.magnet.x=cx; state.s3.magnet.y=cy; state.s3.pole.x=cx; state.s3.pole.y=cy; state.s3._init=true; }
+  buildFilingGrid(state.s3, 34);
+  // s4
+  if(!state.s4._init){ state.s4.wire.x=cx; state.s4.wire.y=cy;
+    state.s4.compass.x=cx+220; state.s4.compass.y=cy-140; state.s4._init=true; }
+  buildFilingGrid(state.s4, 30);
+  // s5: Earth
+  const s5=state.s5;
+  s5.cx=cx; s5.cy=cy; s5.R=Math.min(W,H)*0.26;
+  if(!s5._init){ s5.compass.x=cx + s5.R + 120; s5.compass.y=cy - 40;
+    s5.continents = makeContinents(); s5._init=true; }
+  // s6
+  state.s6.cx=cx; state.s6.cy=cy;
+  // s7
+  const s7=state.s7;
+  s7.cx=cx; s7.cy=cy-10; s7.Rr=Math.min(W,H)*0.2;
+  if(!s7._init){ s7.compass.x=cx + s7.Rr + 170; s7.compass.y=cy - 60; s7._init=true; }
+}
+// rough continent blobs as (lat,lon) polygons, radians
+function makeContinents(){
+  const D=Math.PI/180;
+  const P=(la,lo)=>({lat:la*D, lon:lo*D});
+  return [
+    // N + S America
+    [P(60,-120),P(50,-70),P(25,-80),P(10,-75),P(-10,-60),P(-40,-65),P(-52,-70),P(-30,-52),P(0,-50),P(28,-95),P(48,-125)],
+    // Africa + Europe
+    [P(58,10),P(45,0),P(35,-8),P(12,15),P(-5,10),P(-32,18),P(-35,22),P(-10,40),P(12,45),P(32,32),P(45,28),P(60,25)],
+    // Asia
+    [P(70,60),P(60,40),P(45,50),P(30,70),P(20,78),P(8,98),P(25,105),P(45,120),P(62,110),P(72,95)],
+    // Australia
+    [P(-12,132),P(-20,115),P(-35,118),P(-38,145),P(-22,150),P(-12,142)]
+  ];
+}
+function buildFilingGrid(sc, targetCols){
+  const margin = 40;
+  const cols = targetCols;
+  const step = (W - margin*2) / cols;
+  const rows = Math.max(6, Math.floor((H - margin*2 - 40) / step));
+  const arr = [];
+  const x0 = margin + step/2;
+  const y0 = margin + 50;
+  for(let j=0;j<rows;j++){
+    for(let i=0;i<cols;i++){
+      arr.push({ x: x0 + i*step, y: y0 + j*step, ang: Math.random()*Math.PI, tang: 0 });
+    }
+  }
+  sc.filings = arr;
+  sc.filStep = step;
+}
+
+/* ==================================================================
+   SCENE 1: COMPASS
+================================================================== */
+function drawScene1(dt){
+  const s = state.s1;
+  const sources = magnetPoles(s.magnet);
+
+  // faint field grid of mini needles (optional)
+  if(s.showField){
+    const step = 74;
+    for(let y=70; y<H-20; y+=step){
+      for(let x=40; x<W-20; x+=step){
+        const [bx,by] = fieldAt(x,y,sources);
+        const a = Math.atan2(by,bx);
+        const mag = Math.min(1, Math.hypot(bx,by)*90);
+        ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+        ctx.strokeStyle = `rgba(53,224,208,${0.10+0.25*mag})`;
+        ctx.lineWidth = 2; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(-11,0); ctx.lineTo(11,0); ctx.stroke();
+        // tiny arrow head toward field dir
+        ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(6,-3); ctx.lineTo(6,3); ctx.closePath();
+        ctx.fillStyle=`rgba(53,224,208,${0.15+0.35*mag})`; ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  drawMagnet(s.magnet);
+
+  // compass
+  const [bx,by] = fieldAt(s.compass.x, s.compass.y, sources);
+  const target = Math.atan2(by,bx);
+  s.compass.ang = lerpAngle(s.compass.ang, target, 1-Math.pow(0.001, dt));
+  drawCompass(s.compass.x, s.compass.y, s.compass.ang, 66);
+}
+function drawCompass(x,y,ang,r){
+  ctx.save(); ctx.translate(x,y);
+  // dial
+  ctx.beginPath(); ctx.arc(0,0,r,0,7);
+  ctx.fillStyle='#f4f7ff'; ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=16; ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.lineWidth=4; ctx.strokeStyle='#c3cbe0'; ctx.stroke();
+  // ticks
+  ctx.strokeStyle='#b3bcd4'; ctx.lineWidth=2;
+  for(let k=0;k<12;k++){ ctx.save(); ctx.rotate(k*Math.PI/6);
+    ctx.beginPath(); ctx.moveTo(0,-r+3); ctx.lineTo(0,-r+9); ctx.stroke(); ctx.restore(); }
+  // needle
+  const nw = r*0.16;                                            // needle half-width scales with size
+  ctx.rotate(ang);
+  ctx.beginPath(); ctx.moveTo(r*0.80,0); ctx.lineTo(-r*0.16,-nw); ctx.lineTo(-r*0.16,nw); ctx.closePath();
+  ctx.fillStyle=getc('--n'); ctx.fill();                       // pointing (North seeking) end -> field dir
+  ctx.beginPath(); ctx.moveTo(-r*0.80,0); ctx.lineTo(r*0.16,-nw); ctx.lineTo(r*0.16,nw); ctx.closePath();
+  ctx.fillStyle='#eef1f8'; ctx.strokeStyle='#9aa4bf'; ctx.lineWidth=1.5; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,0,r*0.13,0,7); ctx.fillStyle='#2b3556'; ctx.fill();
+  ctx.restore();
+}
+
+/* ==================================================================
+   SCENE 2: TWO MAGNETS
+================================================================== */
+function facingInteraction(a,b){
+  // returns {force: + = attract, - = repel, based on nearest poles}
+  const pa = magnetPoles(a), pb = magnetPoles(b);
+  // find the pair of closest poles (the ones facing each other)
+  let best=1e9, bi=0, bj=0;
+  for(let i=0;i<2;i++) for(let j=0;j<2;j++){
+    const d = Math.hypot(pa[i].x-pb[j].x, pa[i].y-pb[j].y);
+    if(d<best){ best=d; bi=i; bj=j; }
+  }
+  const opposite = (pa[bi].q * pb[bj].q) < 0;
+  return { attract: opposite, dist: best };
+}
+function drawScene2(dt){
+  const s = state.s2;
+  const inter = facingInteraction(s.a, s.b);
+  const cxA=s.a, cxB=s.b;
+  const dx = cxB.x-cxA.x, dy = cxB.y-cxA.y;
+  const dist = Math.hypot(dx,dy) || 1;
+  const ux = dx/dist, uy = dy/dist;
+
+  // physics glide when not dragging
+  const touching = dist < (s.a.len+s.b.len)*0.52;
+  const strength = clamp(9000/(dist*dist),0,0.9);
+  for(const m of [s.a, s.b]){
+    if(drag && drag.ref===m) continue;
+    const sign = (m===s.a?1:-1); // direction from A->B
+    let fx=0, fy=0;
+    if(inter.attract){ fx = ux*strength*sign; fy = uy*strength*sign; }
+    else { fx = -ux*strength*sign; fy = -uy*strength*sign; }
+    // stop attracting once "clicked" together
+    if(inter.attract && touching){ fx*=0.02; fy*=0.02; m.vx*=0.6; m.vy*=0.6; }
+    m.vx = (m.vx + fx*dt*60)*0.90;
+    m.vy = (m.vy + fy*dt*60)*0.90;
+    m.x += m.vx; m.y += m.vy;
+    // keep on screen
+    m.x = clamp(m.x, 90, W-90); m.y = clamp(m.y, 110, H-90);
+  }
+
+  drawMagnet(s.a); drawMagnet(s.b);
+
+  // interaction arrows: one per magnet, drawn clear of the bodies
+  const midx=(cxA.x+cxB.x)/2, midy=(cxA.y+cxB.y)/2;
+  const col = inter.attract ? '#4be08a' : getc('--n');
+  const amp = 30 + 34*strength;
+  const off = s.a.len/2 + 24;               // start just outside the magnet end
+  if(inter.attract){
+    // arrows point toward each other (into the gap)
+    arrow(cxA.x+ux*off, cxA.y+uy*off, cxA.x+ux*(off+amp), cxA.y+uy*(off+amp), col, 7);
+    arrow(cxB.x-ux*off, cxB.y-uy*off, cxB.x-ux*(off+amp), cxB.y-uy*(off+amp), col, 7);
+  } else {
+    // arrows point away from each other (outward)
+    arrow(cxA.x-ux*off, cxA.y-uy*off, cxA.x-ux*(off+amp), cxA.y-uy*(off+amp), col, 7);
+    arrow(cxB.x+ux*off, cxB.y+uy*off, cxB.x+ux*(off+amp), cxB.y+uy*(off+amp), col, 7);
+  }
+  // spark when touching & attract
+  if(inter.attract && touching){
+    ctx.save(); ctx.globalAlpha=0.6+0.4*Math.sin(performance.now()/90);
+    ctx.beginPath(); ctx.arc(midx,midy,10,0,7);
+    ctx.fillStyle='#eaffef'; ctx.shadowColor='#4be08a'; ctx.shadowBlur=24; ctx.fill();
+    ctx.restore();
+  }
+  // big emoji verdict
+  ctx.font='34px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.globalAlpha=0.9;
+  ctx.fillText(inter.attract? '🤝':'💥', midx, midy - (inter.attract?60:0));
+  ctx.globalAlpha=1;
+}
+
+/* ==================================================================
+   SCENE 3: IRON FILINGS
+================================================================== */
+function drawScene3(dt){
+  const s = state.s3;
+  let sources;
+  if(s.mode==='bar'){ sources = magnetPoles(s.magnet); }
+  else { sources = [{x:s.pole.x, y:s.pole.y, q:s.pole.q}]; }
+
+  s.snap = Math.min(1, s.snap + dt*3);
+  const ease = 1-Math.pow(0.0015, dt);
+
+  for(const f of s.filings){
+    const [bx,by] = fieldAt(f.x, f.y, sources);
+    const mag = Math.hypot(bx,by);
+    const target = Math.atan2(by,bx);
+    f.ang = lerpAngle(f.ang, target, ease);
+    const bright = clamp(0.18 + mag*120, 0.18, 1);
+    const len = (s.filStep*0.42) * clamp(0.5+mag*160,0.5,1.15);
+    ctx.save(); ctx.translate(f.x,f.y); ctx.rotate(f.ang);
+    ctx.strokeStyle = `rgba(199,208,224,${bright})`;
+    ctx.lineWidth = 2.4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
+    ctx.restore();
+  }
+  if(s.mode==='bar') drawMagnet(s.magnet);
+  else drawSinglePole(s.pole);
+}
+function drawSinglePole(p){
+  const isN = p.q>0;
+  ctx.save(); ctx.translate(p.x,p.y);
+  ctx.beginPath(); ctx.arc(0,0,34,0,7);
+  const col = isN?getc('--n'):getc('--s');
+  ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=26; ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle='#fff'; ctx.font='bold 30px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(isN?'N':'S',0,1);
+  ctx.restore();
+}
+
+/* ==================================================================
+   SCENE 4: CURRENT WIRE
+================================================================== */
+function drawScene4(dt){
+  const s = state.s4;
+  s.strength = clamp(s.strength + (s.on? dt*2.5 : -dt*3.5), 0, 1);
+  const ease = 1-Math.pow(0.002, dt);
+  s.flow = (s.flow + (s.on? dt*1.4*s.dir : 0));
+
+  const wx=s.wire.x, wy=s.wire.y;
+
+  // filings align tangentially (circular field)
+  for(const f of s.filings){
+    const dx=f.x-wx, dy=f.y-wy; const r=Math.hypot(dx,dy)||1;
+    const tang = Math.atan2(dy,dx) + s.dir*Math.PI/2; // perpendicular
+    const strengthAt = clamp(9000/(r*r),0,1);
+    const targetAmount = s.strength;
+    // blend between random(off) and tangential(on)
+    f.tang = lerpAngle(f.tang, tang, ease*(0.4+0.6*targetAmount));
+    const bright = clamp(0.14 + strengthAt*targetAmount, 0.14, 1);
+    const len = s.filStep*0.42;
+    ctx.save(); ctx.translate(f.x,f.y); ctx.rotate(f.tang);
+    ctx.strokeStyle=`rgba(199,208,224,${bright})`; ctx.lineWidth=2.4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
+    ctx.restore();
+  }
+
+  // glowing circular field rings + flowing dots
+  if(s.strength>0.02){
+    for(let ri=0; ri<5; ri++){
+      const rr = 55 + ri*46;
+      ctx.beginPath(); ctx.arc(wx,wy,rr,0,7);
+      ctx.strokeStyle=`rgba(255,210,63,${0.10*s.strength})`; ctx.lineWidth=2; ctx.stroke();
+      const dots = 8+ri*2;
+      for(let d=0; d<dots; d++){
+        const a = (d/dots)*2*Math.PI + s.flow*(1.2/(1+ri*0.3));
+        const px=wx+Math.cos(a)*rr, py=wy+Math.sin(a)*rr;
+        ctx.beginPath(); ctx.arc(px,py,3.2,0,7);
+        ctx.fillStyle=`rgba(255,225,120,${0.85*s.strength})`;
+        ctx.shadowColor=getc('--cur'); ctx.shadowBlur=10*s.strength; ctx.fill(); ctx.shadowBlur=0;
+      }
+    }
+  }
+
+  // the wire (into/out of page symbol)
+  ctx.save(); ctx.translate(wx,wy);
+  ctx.beginPath(); ctx.arc(0,0,26,0,7);
+  ctx.fillStyle='#20283f'; ctx.strokeStyle=getc('--cur'); ctx.lineWidth=4;
+  ctx.shadowColor=getc('--cur'); ctx.shadowBlur=18*s.strength; ctx.fill(); ctx.shadowBlur=0; ctx.stroke();
+  ctx.fillStyle=getc('--cur'); ctx.strokeStyle=getc('--cur');
+  if(s.dir>0){ // out of page = dot
+    ctx.beginPath(); ctx.arc(0,0,7,0,7); ctx.fill();
+  } else {      // into page = cross
+    ctx.lineWidth=4; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(-11,-11); ctx.lineTo(11,11);
+    ctx.moveTo(11,-11); ctx.lineTo(-11,11); ctx.stroke();
+  }
+  ctx.restore();
+
+  // compass detects the wire's circular field
+  const c=s.compass;
+  const cdx=c.x-wx, cdy=c.y-wy;
+  const tangC = Math.atan2(cdy,cdx) + s.dir*Math.PI/2;
+  if(s.strength>0.05){
+    c.ang = lerpAngle(c.ang, tangC, ease*(0.3+0.7*s.strength));
+  } else {
+    c.ang += dt*0.35;                       // no current → needle drifts idly
+  }
+  drawCompass(c.x, c.y, c.ang, 60);
+}
+
+/* ==================================================================
+   SCENE 5: EARTH IS A GIANT MAGNET
+================================================================== */
+function drawEarth(dt){
+  const s=state.s5;
+  if(s.spinning) s.spin += dt*0.18;
+  const cx=s.cx, cy=s.cy, R=s.R, at=s.axialTilt;
+  const ca=Math.cos(at), sa=Math.sin(at);
+
+  // magnetic axis endpoints (surface), leans a bit more than spin axis
+  const mt = at + s.magTilt;
+  const mdx=Math.sin(mt), mdy=-Math.cos(mt);
+  const magTop=[cx+R*mdx, cy+R*mdy], magBot=[cx-R*mdx, cy-R*mdy];
+  // field poles: magnetic NORTH sits near geographic SOUTH (bottom), that's why a compass points north
+  const poleN={x:magBot[0], y:magBot[1], q: 240000};
+  const poleS={x:magTop[0], y:magTop[1], q:-240000};
+  const sources=[poleN, poleS];
+
+  // --- field needles outside the globe ---
+  if(s.showField){
+    const step=52;
+    for(let y=64;y<H-16;y+=step) for(let x=24;x<W-16;x+=step){
+      const dd=Math.hypot(x-cx,y-cy);
+      if(dd < R+16) continue;
+      const [bx,by]=fieldAt(x,y,sources);
+      const a=Math.atan2(by,bx);
+      const bright=clamp(0.55-(dd-R)/(R*3.2),0.12,0.55);
+      ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+      ctx.strokeStyle=`rgba(53,224,208,${bright})`; ctx.lineWidth=2; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(-9,0); ctx.lineTo(9,0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(5,-2.5); ctx.lineTo(5,2.5); ctx.closePath();
+      ctx.fillStyle=`rgba(53,224,208,${bright})`; ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // --- globe body ---
+  const g=ctx.createRadialGradient(cx-R*0.35,cy-R*0.4,R*0.15, cx,cy,R);
+  g.addColorStop(0,'#3a7fe0'); g.addColorStop(0.6,'#1c4a8f'); g.addColorStop(1,'#0c2148');
+  ctx.beginPath(); ctx.arc(cx,cy,R,0,7);
+  ctx.fillStyle=g; ctx.shadowColor='rgba(60,140,255,.45)'; ctx.shadowBlur=38; ctx.fill(); ctx.shadowBlur=0;
+
+  // --- continents (orthographic, spinning, back-face culled) ---
+  ctx.save(); ctx.beginPath(); ctx.arc(cx,cy,R,0,7); ctx.clip();
+  function proj(lat,lon){
+    const x3=Math.cos(lat)*Math.sin(lon+s.spin);
+    const y3=Math.sin(lat);
+    const z3=Math.cos(lat)*Math.cos(lon+s.spin);
+    const xr=x3*ca + y3*sa;
+    const yr=y3*ca - x3*sa;
+    return { sx:cx+R*xr, sy:cy-R*yr, z:z3 };
+  }
+  for(const poly of s.continents){
+    let zsum=0; const pts=[];
+    for(const v of poly){ const p=proj(v.lat,v.lon); pts.push(p); zsum+=p.z; }
+    if(zsum/poly.length < 0) continue;          // whole blob on far side → skip
+    ctx.beginPath(); ctx.moveTo(pts[0].sx,pts[0].sy);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].sx,pts[i].sy);
+    ctx.closePath(); ctx.fillStyle='rgba(76,175,96,0.92)'; ctx.fill();
+  }
+  ctx.restore();
+
+  // --- embedded bar magnet (shows through the planet) ---
+  const mAng=Math.atan2(magBot[1]-cy, magBot[0]-cx);   // +axis points to magnetic north (bottom)
+  ctx.save(); ctx.globalAlpha=0.72;
+  drawMagnet({x:cx, y:cy, angle:mAng, len:R*1.28, flip:false});
+  ctx.restore();
+
+  // --- spin axis (dotted) + true-north star ---
+  const sdx=Math.sin(at), sdy=-Math.cos(at);
+  const spinTop=[cx+R*sdx, cy+R*sdy], spinBot=[cx-R*sdx, cy-R*sdy];
+  ctx.save(); ctx.setLineDash([2,7]); ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.5)';
+  ctx.beginPath(); ctx.moveTo(spinTop[0]+sdx*46, spinTop[1]+sdy*46);
+  ctx.lineTo(spinBot[0]-sdx*46, spinBot[1]-sdy*46); ctx.stroke(); ctx.restore();
+  ctx.font='22px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('⭐', spinTop[0]+sdx*46, spinTop[1]+sdy*46);
+
+  // --- magnetic axis (solid, tilted apart) + N/S end dots ---
+  ctx.save(); ctx.lineWidth=2.5; ctx.strokeStyle='rgba(255,255,255,.28)';
+  ctx.beginPath(); ctx.moveTo(magTop[0]+mdx*30, magTop[1]+mdy*30);
+  ctx.lineTo(magBot[0]-mdx*30, magBot[1]-mdy*30); ctx.stroke(); ctx.restore();
+  poleDot(magBot[0]+mdx*30, magBot[1]+mdy*30, getc('--n'), 'N');   // magnetic north (near geo south)
+  poleDot(magTop[0]-mdx*30, magTop[1]-mdy*30, getc('--s'), 'S');
+
+  // --- compass: always swings to magnetic north ---
+  const c=s.compass;
+  const [cbx,cby]=fieldAt(c.x,c.y,sources);
+  c.ang=lerpAngle(c.ang, Math.atan2(cby,cbx), 1-Math.pow(0.001,dt));
+  drawCompass(c.x, c.y, c.ang, 60);
+}
+function poleDot(x,y,col,letter){
+  ctx.beginPath(); ctx.arc(x,y,13,0,7);
+  ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=14; ctx.fill(); ctx.shadowBlur=0;
+  ctx.fillStyle='#fff'; ctx.font='bold 15px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(letter,x,y+1);
+}
+
+/* ==================================================================
+   SCENE 6: CUT THE MAGNET (every piece is a dipole)
+================================================================== */
+function drawCutScene(dt){
+  const s=state.s6;
+  const targetGap = s.n>1 ? 1 : 0;
+  s.gap += (targetGap - s.gap)*(1-Math.pow(0.0005,dt));   // ease pieces apart
+  if(s.pulse>0) s.pulse = Math.max(0, s.pulse - dt*1.6);
+
+  const n=s.n, cy=s.cy;
+  const pieceLen = s.baseLen/n;
+  const gapPx = 34*s.gap;
+  const rowW = s.baseLen + (n-1)*gapPx;
+  let x0 = s.cx - rowW/2;
+
+  for(let i=0;i<n;i++){
+    const px = x0 + pieceLen/2;
+    drawPieceField(px, cy, pieceLen, s.h);
+    x0 += pieceLen + gapPx;
+  }
+  // draw magnets on top of the field loops
+  x0 = s.cx - rowW/2;
+  for(let i=0;i<n;i++){
+    const px = x0 + pieceLen/2;
+    drawMagnetPiece(px, cy, pieceLen, s.h);
+    // highlight the freshly-cut faces (new poles) between pieces
+    if(s.pulse>0 && i<n-1){
+      const faceX = px + pieceLen/2 + gapPx/2;
+      ctx.save(); ctx.globalAlpha=s.pulse;
+      ctx.beginPath(); ctx.arc(faceX, cy, 10+8*s.pulse, 0,7);
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+      ctx.restore();
+    }
+    x0 += pieceLen + gapPx;
+  }
+  // count of pieces (single small number, minimal text)
+  ctx.fillStyle='rgba(232,238,252,.85)'; ctx.font='bold 22px system-ui';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(n===1 ? '1 magnet' : n+' magnets', s.cx, cy - s.h - 46);
+}
+function drawMagnetPiece(px, cy, len, h){
+  const rad=Math.min(h*0.28, len*0.28);
+  ctx.save();
+  roundRectPath(px-len/2, cy-h/2, len, h, rad); ctx.clip();
+  ctx.fillStyle=getc('--s'); ctx.fillRect(px-len/2, cy-h/2, len/2, h);  // S = blue (left)
+  ctx.fillStyle=getc('--n'); ctx.fillRect(px, cy-h/2, len/2, h);        // N = red (right)
+  ctx.fillStyle='rgba(255,255,255,.10)'; ctx.fillRect(px-len/2, cy-h/2, len, h*0.34);
+  ctx.restore();
+  ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.25)';
+  roundRectPath(px-len/2, cy-h/2, len, h, rad); ctx.stroke();
+  if(len>44){
+    ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(h*0.5,len*0.4)}px system-ui`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('S', px-len*0.26, cy);
+    ctx.fillText('N', px+len*0.26, cy);
+  }
+}
+function drawPieceField(px, cy, len, h){
+  const nx=px+len/2, sx=px-len/2;                 // N right end, S left end
+  ctx.strokeStyle='rgba(53,224,208,.55)'; ctx.fillStyle='rgba(53,224,208,.55)';
+  ctx.lineWidth=2; ctx.lineCap='round';
+  for(const dir of [-1,1]){                        // loop above and below
+    const ctrlY = cy + dir*(h*1.9 + 70);           // control point far out so the arc bulges clear of the body
+    const apexY = cy + dir*(h*0.95 + 35);          // actual curve apex (t=0.5)
+    ctx.beginPath();
+    ctx.moveTo(nx, cy);
+    ctx.quadraticCurveTo(px, ctrlY, sx, cy);       // field exits N, curves over to S
+    ctx.stroke();
+    // arrowhead at apex, pointing left (N -> S outside the magnet)
+    ctx.beginPath();
+    ctx.moveTo(px-7, apexY);
+    ctx.lineTo(px+5, apexY - 6);
+    ctx.lineTo(px+5, apexY + 6);
+    ctx.closePath(); ctx.fill();
+  }
+}
+
+/* ==================================================================
+   SCENE 7: CURRENT LOOP / COIL (a loop of current is a magnet)
+================================================================== */
+function rot3(v,pitch,yaw){
+  let x=v[0], y=v[1], z=v[2];
+  let y1=y*Math.cos(pitch)-z*Math.sin(pitch);
+  let z1=y*Math.sin(pitch)+z*Math.cos(pitch); y=y1; z=z1;
+  let x1=x*Math.cos(yaw)+z*Math.sin(yaw);
+  let z2=-x*Math.sin(yaw)+z*Math.cos(yaw); x=x1; z=z2;
+  return [x,y,z];
+}
+function drawCoil(dt){
+  const s=state.s7, cx=s.cx, cy=s.cy, Rr=s.Rr;
+  s.flow += dt*1.4*s.dir;
+  const u=rot3([1,0,0],s.pitch,s.yaw);
+  const v=rot3([0,1,0],s.pitch,s.yaw);
+  const n=rot3([0,0,1],s.pitch,s.yaw);
+  const proj=P=>[cx+P[0]*Rr, cy-P[1]*Rr];
+  const ptAt=t=>[Math.cos(t)*u[0]+Math.sin(t)*v[0], Math.cos(t)*u[1]+Math.sin(t)*v[1], Math.cos(t)*u[2]+Math.sin(t)*v[2]];
+
+  // magnetic moment direction (right-hand rule): M = dir * n
+  const Mx=s.dir*n[0], My=-s.dir*n[1];         // screen-space (y down)
+  const m=Math.hypot(Mx,My);
+  const facing = m<0.06;                         // loop nearly face-on → axis points at/away from viewer
+  const d=Rr*1.18;
+  let poleN, poleS, ahx=0, ahy=0;
+  if(!facing){ ahx=Mx/m; ahy=My/m;
+    poleN=[cx+ahx*d, cy+ahy*d]; poleS=[cx-ahx*d, cy-ahy*d]; }
+  const Q=95000*m;
+  const sources = facing ? [] : [{x:poleN[0],y:poleN[1],q:Q},{x:poleS[0],y:poleS[1],q:-Q}];
+
+  // --- field: lines through the coil ---
+  if(s.showField && !facing){
+    // surrounding needle grid (outside the ring)
+    const step=56;
+    for(let y=64;y<H-16;y+=step) for(let x=24;x<W-16;x+=step){
+      if(Math.hypot(x-cx,y-cy) < Rr*1.15) continue;
+      const [bx,by]=fieldAt(x,y,sources); const a=Math.atan2(by,bx);
+      const bright=clamp(0.4-(Math.hypot(x-cx,y-cy)-Rr)/(Rr*4),0.1,0.4)*clamp(m*2,0,1);
+      if(bright<0.12) continue;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(a);
+      ctx.strokeStyle=`rgba(53,224,208,${bright})`; ctx.lineWidth=2; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(8,0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(4.5,-2.2); ctx.lineTo(4.5,2.2); ctx.closePath();
+      ctx.fillStyle=`rgba(53,224,208,${bright})`; ctx.fill();
+      ctx.restore();
+    }
+    // axis line threading the ring centre
+    ctx.save(); ctx.setLineDash([3,7]); ctx.lineWidth=2.5; ctx.strokeStyle='rgba(53,224,208,.7)';
+    ctx.beginPath(); ctx.moveTo(cx-ahx*Rr*1.5, cy-ahy*Rr*1.5); ctx.lineTo(cx+ahx*Rr*1.5, cy+ahy*Rr*1.5); ctx.stroke();
+    ctx.restore();
+    // dipole loop curves wrapping N -> outside -> S
+    const px=-ahy, py=ahx;                       // perpendicular to axis
+    ctx.strokeStyle='rgba(53,224,208,.6)'; ctx.fillStyle='rgba(53,224,208,.6)'; ctx.lineWidth=2; ctx.lineCap='round';
+    for(const side of [-1,1]) for(const w of [0.95,1.7]){
+      const bulge=Rr*w;
+      const ctlx=cx+px*side*bulge, ctly=cy+py*side*bulge;
+      ctx.beginPath(); ctx.moveTo(poleN[0],poleN[1]); ctx.quadraticCurveTo(ctlx,ctly,poleS[0],poleS[1]); ctx.stroke();
+      // arrowhead at apex, pointing from N toward S
+      const apx=0.25*poleN[0]+0.5*ctlx+0.25*poleS[0], apy=0.25*poleN[1]+0.5*ctly+0.25*poleS[1];
+      const ang=Math.atan2(poleS[1]-ctly, poleS[0]-ctlx);
+      ctx.save(); ctx.translate(apx,apy); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(-3,-4); ctx.lineTo(-3,4); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+  }
+
+  // --- battery + leads ---
+  const by=cy+Rr+78, bw=104, bh=44;
+  ctx.save();
+  // leads from battery up to the ring bottom
+  ctx.strokeStyle='#c9d2e6'; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(cx-30, by-bh/2); ctx.lineTo(cx-30, cy+Rr*0.55); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx+30, by-bh/2); ctx.lineTo(cx+30, cy+Rr*0.55); ctx.stroke();
+  // battery body
+  roundRectPath(cx-bw/2, by-bh/2, bw, bh, 8); ctx.fillStyle='#20283f'; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,.25)'; ctx.stroke();
+  ctx.font='bold 26px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  const leftPlus = s.dir>0;
+  ctx.fillStyle=getc('--cur');
+  ctx.fillText(leftPlus?'+':'–', cx-bw*0.28, by-1);
+  ctx.fillStyle='#c9d2e6';
+  ctx.fillText(leftPlus?'–':'+', cx+bw*0.28, by-1);
+  ctx.fillStyle=getc('--cur'); ctx.font='18px system-ui';
+  ctx.fillText('🔋', cx, by-1);
+  ctx.restore();
+
+  // --- the ring (copper wire) ---
+  const SEG=90;
+  ctx.beginPath();
+  for(let i=0;i<=SEG;i++){ const P=ptAt(i/SEG*2*Math.PI); const q=proj(P); if(i===0)ctx.moveTo(q[0],q[1]); else ctx.lineTo(q[0],q[1]); }
+  ctx.closePath();
+  ctx.lineWidth=9; ctx.strokeStyle='#c67f34'; ctx.shadowColor='#d98a3d'; ctx.shadowBlur=12; ctx.stroke(); ctx.shadowBlur=0;
+  ctx.lineWidth=3.5; ctx.strokeStyle='#f2bd72'; ctx.stroke();
+
+  // --- current dots flowing around the ring ---
+  const K=26;
+  for(let k=0;k<K;k++){
+    const t=(k/K)*2*Math.PI + s.flow;
+    const P=ptAt(t); const q=proj(P);
+    const front=(P[2]+1)/2;                      // 0 back .. 1 front
+    const rad=2.2+2.6*front;
+    ctx.beginPath(); ctx.arc(q[0],q[1],rad,0,7);
+    ctx.fillStyle=`rgba(255,224,110,${0.35+0.6*front})`;
+    ctx.shadowColor=getc('--cur'); ctx.shadowBlur=8*front; ctx.fill(); ctx.shadowBlur=0;
+  }
+
+  // --- N/S face badges (or ⊙/⊗ when face-on) ---
+  if(!facing){
+    poleDot(poleN[0],poleN[1], getc('--n'), 'N');
+    poleDot(poleS[0],poleS[1], getc('--s'), 'S');
+  } else {
+    const toward = (s.dir*n[2])>0;
+    ctx.fillStyle=toward?getc('--n'):getc('--s');
+    ctx.font='bold 30px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(toward?'⊙':'⊗', cx, cy);
+  }
+
+  // --- compass ---
+  const c=s.compass;
+  if(!facing){
+    const [cbx,cby]=fieldAt(c.x,c.y,sources);
+    c.ang=lerpAngle(c.ang, Math.atan2(cby,cbx), 1-Math.pow(0.001,dt));
+  } else { c.ang += dt*0.4; }
+  drawCompass(c.x, c.y, c.ang, 60);
+}
+
+/* ==================================================================
+   MAIN LOOP
+================================================================== */
+let last = performance.now();
+function frame(now){
+  let dt = (now-last)/1000; last=now;
+  dt = Math.min(dt, 0.05);
+  background();
+  if(activeTab===0) drawScene1(dt);
+  else if(activeTab===1) drawScene2(dt);
+  else if(activeTab===2) drawScene3(dt);
+  else if(activeTab===3) drawScene4(dt);
+  else if(activeTab===4) drawEarth(dt);
+  else if(activeTab===5) drawCutScene(dt);
+  else drawCoil(dt);
+  requestAnimationFrame(frame);
+}
+
+/* ==================================================================
+   INPUT: dragging (mouse)
+================================================================== */
+function relMouse(e){
+  const r = cv.getBoundingClientRect();
+  return { x:e.clientX-r.left, y:e.clientY-r.top };
+}
+function hitMagnet(m, x, y){
+  const dx=x-m.x, dy=y-m.y;
+  const lx = dx*Math.cos(m.angle)+dy*Math.sin(m.angle);
+  const ly = -dx*Math.sin(m.angle)+dy*Math.cos(m.angle);
+  return Math.abs(lx)<m.len/2+10 && Math.abs(ly)<m.len*0.32/2+16;
+}
+function pickTarget(x,y){
+  if(activeTab===0){
+    const s=state.s1;
+    if(Math.hypot(x-s.compass.x,y-s.compass.y)<74) return {ref:s.compass, isCompass:true};
+    if(hitMagnet(s.magnet,x,y)) return {ref:s.magnet};
+  } else if(activeTab===1){
+    const s=state.s2;
+    if(hitMagnet(s.b,x,y)) return {ref:s.b};
+    if(hitMagnet(s.a,x,y)) return {ref:s.a};
+  } else if(activeTab===2){
+    const s=state.s3;
+    if(s.mode==='bar'){ if(hitMagnet(s.magnet,x,y)) return {ref:s.magnet}; }
+    else { if(Math.hypot(x-s.pole.x,y-s.pole.y)<44) return {ref:s.pole}; }
+  } else if(activeTab===3){
+    const s=state.s4;
+    if(Math.hypot(x-s.compass.x,y-s.compass.y)<74) return {ref:s.compass, isCompass:true};
+    if(Math.hypot(x-s.wire.x,y-s.wire.y)<40) return {ref:s.wire};
+  } else if(activeTab===4){
+    const s=state.s5;
+    if(Math.hypot(x-s.compass.x,y-s.compass.y)<74) return {ref:s.compass, isCompass:true};
+  } else if(activeTab===6){
+    const s=state.s7;
+    if(Math.hypot(x-s.compass.x,y-s.compass.y)<74) return {ref:s.compass, isCompass:true};
+    return {coilRotate:true};   // dragging anywhere else rotates the coil in 3D
+  }
+  return null;
+}
+cv.addEventListener('mousedown', e=>{
+  const {x,y}=relMouse(e); mouse.down=true;
+  const t=pickTarget(x,y);
+  if(t){
+    if(t.coilRotate){ drag={coilRotate:true, lastX:x, lastY:y}; }
+    else { drag={ref:t.ref, ox:x-t.ref.x, oy:y-t.ref.y, isCompass:t.isCompass};
+      if(t.ref.vx!==undefined){t.ref.vx=0;t.ref.vy=0;} }
+    cv.classList.add('grabbing'); }
+});
+window.addEventListener('mousemove', e=>{
+  const {x,y}=relMouse(e); mouse.x=x; mouse.y=y;
+  if(!drag) return;
+  if(drag.coilRotate){
+    const s=state.s7;
+    s.yaw += (x-drag.lastX)*0.01;
+    s.pitch = clamp(s.pitch + (y-drag.lastY)*0.01, -1.4, 1.4);
+    drag.lastX=x; drag.lastY=y;
+  } else {
+    drag.ref.x = clamp(x-drag.ox, 30, W-30); drag.ref.y = clamp(y-drag.oy, 60, H-30);
+    if(activeTab===2 && state.s3.mode==='bar' && drag.ref===state.s3.magnet) state.s3.snap=0;
+  }
+});
+window.addEventListener('mouseup', ()=>{ mouse.down=false; drag=null; cv.classList.remove('grabbing'); });
+
+/* ==================================================================
+   TABS + PER-SCENE CONTROLS
+================================================================== */
+const hints = [
+  'Drag the compass around the magnet 🧭',
+  'Bring the magnets close, flip a pole! 🧲',
+  'Move the magnet, watch the filings ✨',
+  'Turn on the current, the compass feels it! ⚡',
+  'Earth is a giant magnet, find North 🧭',
+  'Cut it, every piece is still a magnet! ✂️',
+  'Drag to tilt the coil, current makes a magnet! 🔁'
+];
+document.querySelectorAll('.tab').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = +btn.dataset.tab;
+    if(activeTab===2) state.s3.snap=0;
+    setControls();
+  });
+});
+function setControls(){
+  hintEl.textContent = hints[activeTab];
+  controlsEl.innerHTML='';
+  if(activeTab===0){
+    addBtn('🔄 Flip poles', ()=>{ state.s1.magnet.flip = !state.s1.magnet.flip; });
+    const fb = addBtn(state.s1.showField?'🌐 Field: ON':'🌐 Field: OFF', null);
+    if(state.s1.showField) fb.classList.add('on');
+    fb.onclick=()=>{ state.s1.showField = !state.s1.showField; setControls(); };
+  } else if(activeTab===1){
+    addBtn('🔄 Flip left', ()=>{ state.s2.a.flip=!state.s2.a.flip; });
+    addBtn('🔄 Flip right', ()=>{ state.s2.b.flip=!state.s2.b.flip; });
+    addBtn('↺ Reset', ()=>{ state.s2._init=false; state.s2.a.vx=state.s2.a.vy=0; state.s2.b.vx=state.s2.b.vy=0; layoutScene(); });
+  } else if(activeTab===2){
+    const seg=document.createElement('div'); seg.className='seg';
+    const b1=segBtn('Single pole', state.s3.mode==='single');
+    const b2=segBtn('Bar magnet', state.s3.mode==='bar');
+    b1.onclick=()=>{ state.s3.mode='single'; state.s3.snap=0; setControls(); };
+    b2.onclick=()=>{ state.s3.mode='bar'; state.s3.snap=0; setControls(); };
+    seg.append(b1,b2); controlsEl.appendChild(seg);
+    if(state.s3.mode==='single'){
+      addBtn('🔄 N / S', ()=>{ state.s3.pole.q *= -1; });
+    } else {
+      addBtn('🔄 Flip poles', ()=>{ state.s3.magnet.flip=!state.s3.magnet.flip; });
+    }
+  } else if(activeTab===3){
+    const on = state.s4.on;
+    const b = addBtn(on?'⚡ Current: ON':'⚪ Current: OFF', null);
+    if(on) b.classList.add('on');
+    b.onclick=()=>{ state.s4.on=!state.s4.on; setControls(); };
+    addBtn('🔄 Reverse ⊙ / ⊗', ()=>{ state.s4.dir *= -1; });
+  } else if(activeTab===4){
+    const fb = addBtn(state.s5.showField?'🌐 Field: ON':'🌐 Field: OFF', null);
+    if(state.s5.showField) fb.classList.add('on');
+    fb.onclick=()=>{ state.s5.showField = !state.s5.showField; setControls(); };
+    const sb = addBtn(state.s5.spinning?'⏸ Pause spin':'▶ Spin', null);
+    sb.onclick=()=>{ state.s5.spinning = !state.s5.spinning; setControls(); };
+  } else if(activeTab===5){
+    const cut = addBtn('✂️ Cut', ()=>{
+      if(state.s6.n < 8){ state.s6.n *= 2; state.s6.pulse = 1; }
+    });
+    cut.classList.add('on');
+    addBtn('↺ Reset', ()=>{ state.s6.n = 1; state.s6.gap = 0; state.s6.pulse = 0; });
+  } else {
+    addBtn('🔄 Reverse current', ()=>{ state.s7.dir *= -1; });
+    const fb = addBtn(state.s7.showField?'🌐 Field: ON':'🌐 Field: OFF', null);
+    if(state.s7.showField) fb.classList.add('on');
+    fb.onclick=()=>{ state.s7.showField = !state.s7.showField; setControls(); };
+    addBtn('↺ Reset tilt', ()=>{ state.s7.yaw=0.6; state.s7.pitch=0.5; });
+  }
+}
+function addBtn(label, fn){
+  const b=document.createElement('button'); b.className='ctl'; b.textContent=label;
+  if(fn) b.onclick=fn; controlsEl.appendChild(b); return b;
+}
+function segBtn(label, sel){
+  const b=document.createElement('button'); b.textContent=label; if(sel)b.classList.add('sel'); return b;
+}
+
+/* ==================================================================
+   FULL SCREEN
+================================================================== */
+const fsBtn = document.getElementById('fs');
+fsBtn.addEventListener('click', ()=>{
+  if(document.fullscreenElement){ document.exitFullscreen(); }
+  else { document.documentElement.requestFullscreen().catch(()=>{}); }
+});
+document.addEventListener('fullscreenchange', ()=>{
+  fsBtn.textContent = document.fullscreenElement ? '🡼' : '⛶';
+  fsBtn.title = document.fullscreenElement ? 'Exit full screen' : 'Full screen';
+  setTimeout(resize, 60);
+});
+
+/* ==================================================================
+   BOOT
+================================================================== */
+resize();
+setControls();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

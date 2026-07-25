@@ -1,0 +1,14 @@
+# Only the published site goes to GitHub. Everything else stays local.
+# To publish another simulation later: add its id to PUBLISHED in
+# website_for_simualtions/data/simulations.js AND un-ignore its folder here.
+
+/*
+!/.gitignore
+!/.nojekyll
+!/index.html
+!/website_for_simualtions/
+
+# published simulations (one un-ignore per folder)
+!/magnetics/
+/magnetics/*
+!/magnetics/magnets_grade_10/

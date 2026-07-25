@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Physics Playground | Interactive Simulations</title>
+  <meta name="description" content="A colorful collection of interactive physics simulations, organized by topic. Explore, play and understand." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔬</text></svg>" />
+</head>
+<body>
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="wrap">
+      <a class="brand" href="index.html">
+        <span class="logo">🔬</span>
+        <span>Physics Playground<small>Interactive simulations</small></span>
+      </a>
+      <span class="spacer"></span>
+      <a class="ghost-btn hide-sm" href="#topics">Browse topics ↓</a>
+      <a class="ghost-btn" href="#about">About the author</a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <span class="blob b1"></span><span class="blob b2"></span>
+    <span class="blob b3"></span><span class="blob b4"></span>
+    <div class="wrap">
+      <h1>Play with physics.<br /><span class="grad">See how it really works.</span></h1>
+      <p class="sub">A growing collection of hands-on simulations: drag, tilt, spin and switch things on.
+        Pick a topic and start exploring. 🚀</p>
+
+      <div class="stats">
+        <div><b id="stat-sims">0</b><span>Simulations</span></div>
+        <div><b id="stat-topics">0</b><span>Topics</span></div>
+        <div><b>15+</b><span>Made for ages</span></div>
+      </div>
+
+      <div class="searchbar">
+        <span class="ico">🔍</span>
+        <input id="search" type="search" placeholder="Search a simulation… (friction, dipole, mirror)" autocomplete="off" />
+      </div>
+    </div>
+  </section>
+
+  <!-- Topic chip nav -->
+  <nav class="chips" id="topics">
+    <div class="wrap"><div class="row" id="chip-row"></div></div>
+  </nav>
+
+  <!-- Sections render here -->
+  <main class="wrap" id="sections"></main>
+  <p class="no-results" id="no-results">No simulations match that search. Try another word 🤔</p>
+
+  <!-- ======================= About the author ======================= -->
+  <section class="about-wrap wrap" id="about">
+    <div class="about-card reveal">
+      <span class="a-blob ab1"></span><span class="a-blob ab2"></span>
+
+      <span class="eyebrow">About the author</span>
+
+      <div class="about-grid">
+
+        <!-- Left column: identity card -->
+        <aside class="id-col">
+          <div class="avatar">MR</div>
+          <h2>Manoj Rathod</h2>
+          <p class="role">Physicist by training. Quant by profession. Teacher by choice.</p>
+          <ul class="id-list">
+            <li><span>Education</span><b>BS-MS, Indian Institute of Science</b></li>
+            <li><span>Certification</span><b>NISM Research Analyst</b></li>
+            <li><span>Certification</span><b>PMS Certified</b></li>
+            <li><span>Based in</span><b>India</b></li>
+          </ul>
+        </aside>
+
+        <!-- Right column: the story -->
+        <div class="bio-col">
+          <p class="about-bio">
+            I studied at the <b>Indian Institute of Science</b> on its five year <b>BS-MS</b>
+            programme, where two interests took hold at the same time: the structure of physics,
+            and the pleasure of turning an idea into something you can actually operate.
+          </p>
+          <p class="about-bio">
+            Professionally I work with markets. I am a <b>NISM certified Research Analyst</b> and
+            <b>PMS certified</b>, and I build <b>algorithms for financial markets and data</b>:
+            research pipelines, systematic strategies and risk models. The habit is the same one
+            physics teaches you, describe the system honestly, then test the description against
+            reality.
+          </p>
+          <p class="about-bio">
+            The rest of my time goes into <b>teaching</b>. Most students do not struggle with
+            physics itself, they struggle with physics that only ever exists on paper. So I build
+            these simulations: small worlds where you can pull a string, tilt a wedge or flip a
+            switch and watch the equations respond. A concept you can feel does not have to be
+            memorised.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="wrap">
+      Made with ❤️ for curious minds &nbsp;·&nbsp; <b>Physics Playground</b><br />
+      Tip: click any card to open its page with notes, a video and a launch button.
+    </div>
+  </footer>
+
+  <script src="data/simulations.js"></script>
+  <script src="assets/js/home.js"></script>
+</body>
+</html>
