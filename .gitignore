@@ -13,6 +13,7 @@
 /magnetics/*
 !/magnetics/magnets_grade_10/
 !/projectile_motion/
+!/relative_motion/
 !/constrained_motion/
 /constrained_motion/*
 !/constrained_motion/constrained_motion_lab.html

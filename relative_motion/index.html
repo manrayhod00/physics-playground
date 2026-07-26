@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Relative Motion · 1D</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#11161f; --line:#232c3a; --ink:#e8eef7; --dim:#8b97a8;
+    --acc:#7dd3fc;
+    --ca:#22d3ee; --cb:#f472b6; --cg:#9aa7b8;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%; overscroll-behavior:none}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:13px/1.5 ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+    display:flex; overflow:hidden;
+    -webkit-tap-highlight-color:transparent; touch-action:manipulation;
+  }
+  #stage{flex:1; position:relative; min-width:0; min-height:0}
+  canvas{display:block; width:100%; height:100%; touch-action:none}
+
+  /* ---- floating readouts ---- */
+  .card{
+    position:absolute; z-index:5;
+    background:rgba(17,22,31,.88); border:1px solid var(--line); border-radius:10px;
+    padding:10px 13px; backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+    pointer-events:none;
+  }
+  #hud{ top:12px; left:12px; min-width:184px }
+  #eqn{ top:12px; right:12px; font-family:'Consolas','Menlo',monospace; font-size:12.5px }
+
+  .ttl{font:700 10px/1.3 ui-sans-serif,system-ui,sans-serif; letter-spacing:.11em;
+       text-transform:uppercase; color:var(--dim); margin-bottom:6px}
+  .ttl b{color:var(--acc); letter-spacing:0}
+  .r{display:flex; justify-content:space-between; gap:16px; font-size:12.5px; align-items:baseline}
+  .r .k{color:var(--dim)}
+  .r .v{font-weight:700; font-variant-numeric:tabular-nums; color:var(--ink)}
+  #hud hr{border:none; border-top:1px solid var(--line); margin:6px 0}
+  .big{font-size:15px}
+  .r.a .k,.r.a .v{color:var(--ca)}
+  .r.b .k,.r.b .v{color:var(--cb)}
+  .r.g .k,.r.g .v{color:var(--cg)}
+  .r.me .k::after{content:' 🎥'}
+  .r.me .v{opacity:.75}
+  #eqn .l{color:var(--dim); margin-top:5px; white-space:nowrap}
+  #eqn .l:first-of-type{margin-top:0}
+  #eqn .l.a{color:var(--ca)} #eqn .l.b{color:var(--cb)} #eqn .l.g{color:var(--cg)}
+  #eqn .l s{text-decoration:none; color:#5d6a7c}
+
+  /* ---- right panel ---- */
+  #panel{
+    --px:15px; --pt:14px;
+    width:308px; flex-shrink:0; min-width:0; max-width:100%;
+    background:var(--panel); border-left:1px solid var(--line);
+    padding:var(--pt) var(--px) 34px; overflow-y:auto; scrollbar-width:thin;
+    scrollbar-color:var(--line) transparent;
+    -webkit-overflow-scrolling:touch; overscroll-behavior:contain; touch-action:pan-y;
+  }
+  #panel::-webkit-scrollbar{width:5px}
+  #panel::-webkit-scrollbar-thumb{background:var(--line); border-radius:3px}
+  #panel h1{font:700 15.5px/1.3 ui-sans-serif,system-ui,sans-serif; color:#fff; margin-bottom:14px}
+  #panel h1 span{display:block; font:400 11px/1.4 ui-sans-serif,system-ui,sans-serif;
+    color:var(--dim); margin-top:2px}
+  #panel h2{font:700 10.5px/1.3 ui-sans-serif,system-ui,sans-serif;
+    letter-spacing:.1em; text-transform:uppercase;
+    color:var(--dim); margin:18px 0 10px; padding-bottom:7px; border-bottom:1px solid var(--line)}
+  #panel h2 i{font-style:normal; float:right; letter-spacing:0; text-transform:none}
+
+  /* ---- sticky dock: time + transport + camera ---- */
+  #dock{
+    position:sticky; top:calc(-1 * var(--pt)); z-index:12;
+    margin:calc(-1 * var(--pt)) calc(-1 * var(--px)) 15px;
+    padding:10px var(--px) 11px;
+    background:rgba(17,22,31,.95); border-bottom:1px solid var(--line);
+    backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    box-shadow:0 8px 16px -12px #000;
+  }
+  #dock .btns button{min-height:42px; font-size:12px}
+  #dock .tt{
+    font:700 9.5px/1.3 ui-sans-serif,system-ui,sans-serif; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--dim); margin-bottom:7px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  #dock .tt b{color:var(--acc); font-variant-numeric:tabular-nums; letter-spacing:0; font-size:11px}
+
+  /* ---- camera picker ---- */
+  #cams{display:flex; gap:7px; margin-top:9px}
+  #cams button{
+    flex:1; min-height:54px; border:1px solid var(--line); border-radius:11px;
+    background:#161d29; color:var(--dim); cursor:pointer; touch-action:manipulation;
+    -webkit-user-select:none; user-select:none; padding:6px 2px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    transition:background .16s, border-color .16s, color .16s;
+  }
+  #cams button .n{font:800 17px/1 ui-sans-serif,system-ui,sans-serif; color:#c3ccd9}
+  #cams button .s{font:600 9px/1.2 ui-sans-serif,system-ui,sans-serif; letter-spacing:.06em;
+    text-transform:uppercase; color:#6b7a8d}
+  #cams button.on{background:#1d2836; box-shadow:0 3px 14px -6px currentColor}
+  #cams button.on .n,#cams button.on .s{color:currentColor}
+  #cams button[data-f=G].on{border-color:var(--cg); color:var(--cg)}
+  #cams button[data-f=A].on{border-color:var(--ca); color:var(--ca)}
+  #cams button[data-f=B].on{border-color:var(--cb); color:var(--cb)}
+  #cams button:active{transform:scale(.97)}
+
+  /* ---- preset cards ---- */
+  .cases{display:flex; flex-direction:column; gap:7px}
+  .case{
+    position:relative; display:flex; align-items:center; gap:11px; width:100%;
+    min-height:50px; padding:9px 12px; overflow:hidden;
+    border:1px solid var(--line); border-radius:11px; background:#161d29;
+    color:var(--dim); cursor:pointer; text-align:left; font:inherit;
+    -webkit-user-select:none; user-select:none; touch-action:manipulation;
+    transition:background .16s, border-color .16s, color .16s;
+  }
+  .case svg{width:34px; height:20px; flex-shrink:0; overflow:visible}
+  .case .cn{display:block; font:700 12.5px/1.25 ui-sans-serif,system-ui,sans-serif; color:#c3ccd9}
+  .case .cd{display:block; font-size:10.5px; line-height:1.35; color:#6b7a8d; margin-top:2px}
+  .case::before{
+    content:''; position:absolute; left:0; top:8px; bottom:8px; width:3px;
+    border-radius:0 3px 3px 0; background:var(--acc); opacity:0; transition:opacity .16s;
+  }
+  .case.on{
+    border-color:var(--acc); color:var(--acc);
+    background:linear-gradient(100deg, rgba(125,211,252,.15), rgba(125,211,252,.04));
+  }
+  .case.on::before{opacity:1}
+  .case.on .cn{color:#fff}
+  .case:active{transform:scale(.985)}
+
+  .row{margin-bottom:11px}
+  .row label{display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-size:11.5px; color:var(--dim); margin-bottom:3px}
+  .row label b{
+    color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap;
+    background:#0d121a; border:1px solid var(--line); border-radius:6px; padding:2px 8px;
+    font-size:11.5px;
+  }
+  .row.a label b{color:var(--ca); border-color:#1b4a55}
+  .row.b label b{color:var(--cb); border-color:#5a2b42}
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:28px; margin:0;
+    background:transparent; outline:none; cursor:pointer; touch-action:none;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:4px; border-radius:3px; background:var(--line)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:19px; height:19px; margin-top:-7.5px; border-radius:50%;
+    background:var(--acc); border:3px solid var(--panel);
+    box-shadow:0 0 0 1px var(--acc); cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{height:4px; border-radius:3px; background:var(--line)}
+  input[type=range]::-moz-range-thumb{
+    width:19px; height:19px; border-radius:50%; background:var(--acc);
+    border:3px solid var(--panel); box-shadow:0 0 0 1px var(--acc); cursor:pointer;
+  }
+  .row.a input[type=range]::-webkit-slider-thumb{background:var(--ca); box-shadow:0 0 0 1px var(--ca)}
+  .row.a input[type=range]::-moz-range-thumb{background:var(--ca); box-shadow:0 0 0 1px var(--ca)}
+  .row.b input[type=range]::-webkit-slider-thumb{background:var(--cb); box-shadow:0 0 0 1px var(--cb)}
+  .row.b input[type=range]::-moz-range-thumb{background:var(--cb); box-shadow:0 0 0 1px var(--cb)}
+
+  .note{font-size:10.5px; line-height:1.4; color:#6b7a8d; font-style:italic; padding:2px 6px 4px}
+
+  .btns{display:flex; gap:6px}
+  .btns button{
+    flex:1; min-height:44px; padding:8px 4px; border:1px solid var(--line); border-radius:9px;
+    background:#161d29; color:var(--dim); cursor:pointer; touch-action:manipulation;
+    -webkit-user-select:none; user-select:none;
+    font:600 11.5px/1.25 ui-sans-serif,system-ui,sans-serif;
+    transition:background .16s, border-color .16s, color .16s;
+  }
+  .btns button.on{background:var(--acc); color:#06121a; border-color:var(--acc)}
+  .btns button:active{transform:scale(.97)}
+
+  .chk{display:flex; align-items:center; gap:9px; cursor:pointer;
+       color:#c3ccd9; font-size:12px; min-height:34px; padding:0 6px;
+       border-radius:8px; user-select:none; -webkit-user-select:none; touch-action:manipulation}
+  .chk input{width:17px; height:17px; accent-color:var(--acc); cursor:pointer; flex-shrink:0}
+  .chk:active{background:#161d29}
+
+  @media (hover:hover){
+    .case:hover{border-color:#3a75a0; background:#1a2230}
+    .case.on:hover{border-color:var(--acc)}
+    .btns button:hover{color:var(--ink); border-color:var(--acc)}
+    .btns button.on:hover{color:#06121a}
+    #cams button:hover{color:var(--ink); border-color:#3a75a0}
+    .chk:hover{background:#161d29}
+  }
+
+  /* ---- tablet / phone: panel drops below the stage ---- */
+  @media (max-width:880px){
+    body{flex-direction:column}
+    #panel{
+      width:100%; max-height:47vh; border-left:none; border-top:1px solid var(--line);
+      --px:16px; --pt:12px; padding:var(--pt) var(--px) 26px;
+    }
+    .pgrid{display:grid; grid-template-columns:1fr 1fr; column-gap:22px; align-items:start}
+    .pgrid > *{min-width:0}
+    .pgrid > .full{grid-column:1 / -1}
+  }
+  @media (max-width:620px){
+    .pgrid{grid-template-columns:1fr}
+    #panel{max-height:50vh}
+  }
+  @media (max-width:560px){
+    .card{padding:8px 10px}
+    #hud{min-width:150px}
+    #eqn{font-size:11px}
+  }
+  @media (max-width:470px){
+    #panel{max-height:46vh}
+    .card{padding:6px 8px; border-radius:8px}
+    #hud{left:8px; width:calc(46% - 12px); min-width:0}
+    #hud .r{font-size:11px; gap:6px}
+    #hud .big{font-size:12.5px}
+    #hud hr{margin:4px 0}
+    #eqn{right:8px; width:calc(54% - 12px); font-size:9.5px; line-height:1.5}
+    .ttl{font-size:9px; margin-bottom:3px}
+  }
+  /* ---- phone held sideways ----
+     stacking here would squeeze the road into a letterbox slit, so go back to
+     side by side with a narrow panel. Must come last to beat the rules above. */
+  @media (max-width:880px) and (max-height:560px) and (orientation:landscape){
+    body{flex-direction:row}
+    #panel{
+      width:min(268px,42vw); max-height:none;
+      border-left:1px solid var(--line); border-top:none;
+      --px:12px; --pt:10px; padding:var(--pt) var(--px) 24px;
+    }
+    .pgrid{grid-template-columns:1fr}
+    #panel h1{font-size:14px; margin-bottom:10px}
+    #panel h2{margin:14px 0 8px}
+    #dock .btns button{min-height:38px}
+    #cams button{min-height:46px}
+    .case{min-height:44px; padding:7px 10px}
+    .card{padding:7px 9px; border-radius:8px}
+    #hud{left:8px; top:8px; min-width:0; width:auto}
+    #hud .r{font-size:11px; gap:10px}
+    #hud .big{font-size:12.5px}
+    #hud hr{margin:4px 0}
+    #eqn{right:8px; top:8px; width:auto; font-size:9.5px; line-height:1.5}
+    .ttl{font-size:9px; margin-bottom:3px}
+  }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+
+  <div class="card" id="hud">
+    <div class="ttl">Seen from <b id="o-frame">G</b></div>
+    <div class="r"><span class="k">t</span><span class="v big" id="o-t">0.0 s</span></div>
+    <hr>
+    <div class="r a" id="row-A"><span class="k">v<sub>A</sub></span><span class="v" id="o-va">·</span></div>
+    <div class="r b" id="row-B"><span class="k">v<sub>B</sub></span><span class="v" id="o-vb">·</span></div>
+    <div class="r g" id="row-G"><span class="k">v<sub>ground</sub></span><span class="v" id="o-vg">·</span></div>
+    <hr>
+    <div class="r"><span class="k">gap</span><span class="v" id="o-gap">·</span></div>
+  </div>
+
+  <div class="card" id="eqn">
+    <div class="ttl">Maths</div>
+    <div class="l" id="e-1">·</div>
+    <div class="l" id="e-2">·</div>
+    <div class="l" id="e-3">·</div>
+  </div>
+</div>
+
+<div id="panel">
+  <div id="dock">
+    <div class="tt"><span>Time</span><b id="d-t">0.0 s</b></div>
+    <div class="btns">
+      <button id="b-play">▶ Play</button>
+      <button id="b-step">⏭ Step</button>
+      <button id="b-reset">⏮ Reset</button>
+    </div>
+    <div id="cams">
+      <button data-f="G" class="on"><span class="n">G</span><span class="s">ground</span></button>
+      <button data-f="A"><span class="n">A</span><span class="s">inside A</span></button>
+      <button data-f="B"><span class="n">B</span><span class="s">inside B</span></button>
+    </div>
+  </div>
+
+  <h1>Relative Motion · 1D<span>same motion, three cameras</span></h1>
+
+  <div class="pgrid">
+  <div class="full">
+    <h2>Try this</h2>
+    <div class="cases" id="presets">
+      <button class="case on" data-p="same">
+        <svg viewBox="0 0 34 20" fill="none" stroke-linecap="round" stroke-width="2">
+          <path d="M2 6 H26" stroke="#22d3ee"/><path d="M22 2 L27 6 L22 10" stroke="#22d3ee"/>
+          <path d="M2 15 H14" stroke="#f472b6"/><path d="M10 11 L15 15 L10 19" stroke="#f472b6"/>
+        </svg>
+        <span><span class="cn">Same direction</span><span class="cd">A 12 · B 5</span></span>
+      </button>
+      <button class="case" data-p="opp">
+        <svg viewBox="0 0 34 20" fill="none" stroke-linecap="round" stroke-width="2">
+          <path d="M2 6 H26" stroke="#22d3ee"/><path d="M22 2 L27 6 L22 10" stroke="#22d3ee"/>
+          <path d="M32 15 H12" stroke="#f472b6"/><path d="M16 11 L11 15 L16 19" stroke="#f472b6"/>
+        </svg>
+        <span><span class="cn">Opposite</span><span class="cd">A 12 · B −8</span></span>
+      </button>
+      <button class="case" data-p="rest">
+        <svg viewBox="0 0 34 20" fill="none" stroke-linecap="round" stroke-width="2">
+          <path d="M2 6 H26" stroke="#22d3ee"/><path d="M22 2 L27 6 L22 10" stroke="#22d3ee"/>
+          <circle cx="17" cy="15" r="3.2" stroke="#f472b6"/>
+        </svg>
+        <span><span class="cn">B parked</span><span class="cd">A 12 · B 0</span></span>
+      </button>
+      <button class="case" data-p="equal">
+        <svg viewBox="0 0 34 20" fill="none" stroke-linecap="round" stroke-width="2">
+          <path d="M2 6 H26" stroke="#22d3ee"/><path d="M22 2 L27 6 L22 10" stroke="#22d3ee"/>
+          <path d="M2 15 H26" stroke="#f472b6"/><path d="M22 11 L27 15 L22 19" stroke="#f472b6"/>
+        </svg>
+        <span><span class="cn">Equal speed</span><span class="cd">A 10 · B 10 — watch from A</span></span>
+      </button>
+      <button class="case" data-p="acc">
+        <svg viewBox="0 0 34 20" fill="none" stroke-linecap="round" stroke-width="2">
+          <path d="M2 6 H26" stroke="#22d3ee"/><path d="M22 2 L27 6 L22 10" stroke="#22d3ee"/>
+          <circle cx="4" cy="15" r="1.2" fill="#f472b6" stroke="none"/>
+          <circle cx="9" cy="15" r="1.2" fill="#f472b6" stroke="none"/>
+          <circle cx="17" cy="15" r="1.2" fill="#f472b6" stroke="none"/>
+          <circle cx="29" cy="15" r="1.2" fill="#f472b6" stroke="none"/>
+        </svg>
+        <span><span class="cn">B speeds up</span><span class="cd">a<sub>B</sub> = 2 m/s²</span></span>
+      </button>
+    </div>
+  </div>
+
+  <div>
+  <h2>Car A <i style="color:#22d3ee">■</i></h2>
+  <div class="row a"><label>v <b id="l-va">+12 m/s</b></label>
+    <input type="range" id="i-va" min="-20" max="20" step="1" value="12"></div>
+  <div class="row a"><label>a <b id="l-aa">0 m/s²</b></label>
+    <input type="range" id="i-aa" min="-4" max="4" step="0.5" value="0"></div>
+  </div>
+
+  <div>
+  <h2>Car B <i style="color:#f472b6">■</i></h2>
+  <div class="row b"><label>v <b id="l-vb">+5 m/s</b></label>
+    <input type="range" id="i-vb" min="-20" max="20" step="1" value="5"></div>
+  <div class="row b"><label>a <b id="l-ab">0 m/s²</b></label>
+    <input type="range" id="i-ab" min="-4" max="4" step="0.5" value="0"></div>
+  </div>
+
+  <div>
+  <h2>Show</h2>
+  <label class="chk"><input type="checkbox" id="c-arrow" checked> velocity arrows</label>
+  <label class="chk"><input type="checkbox" id="c-dots" checked> strobe dots · every 0.5 s</label>
+  <label class="chk"><input type="checkbox" id="c-gap" checked> gap between cars</label>
+  <label class="chk"><input type="checkbox" id="c-km" checked> road numbers</label>
+  <label class="chk"><input type="checkbox" id="c-flow"> trees &amp; road markings</label>
+  <div class="note">driver's view only. Off: nothing outside to judge your own
+    speed by, so you feel at rest and only the other car moves.</div>
+  </div>
+
+  <div>
+  <h2>Setup</h2>
+  <div class="row"><label>start gap <b id="l-d0">40 m</b></label>
+    <input type="range" id="i-d0" min="10" max="120" step="5" value="40"></div>
+  <div class="row"><label>time speed <b id="l-rate">0.3×</b></label>
+    <input type="range" id="i-rate" min="0.2" max="2" step="0.1" value="0.3"></div>
+  </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+/* ---------------------------------------------------------------
+   State.  Every car keeps (x0, v0, a) valid from time t0 onward, so a
+   slider can be moved mid-run without the car ever jumping: we rebase
+   x0/t0 to "here, now" and only the new number takes effect.
+---------------------------------------------------------------- */
+var S = {
+  t:0, playing:false, rate:0.3,        // slow by default: easier to talk over
+  frame:'G', prev:'G', tr:1,          // camera, previous camera, blend 0..1
+  gap0:40,
+  A:{x0:-20, v0:12, a:0, t0:0, face:1},
+  B:{x0: 20, v0: 5, a:0, t0:0, face:1},
+  trail:[], nextDot:0, snapZoom:true,
+  show:{arrow:true, dots:true, gap:true, km:true, flow:false}
+};
+var COL = {A:'#22d3ee', B:'#f472b6', G:'#9aa7b8'};
+var DOT_DT = 0.5, TRANS = 0.45, MAX_DOTS = 260;
+
+function pos(o,t){ var d=t-o.t0; return o.x0 + o.v0*d + 0.5*o.a*d*d; }
+function vel(o,t){ return o.v0 + o.a*(t-o.t0); }
+function refX(f,t){ return f==='A'?pos(S.A,t) : f==='B'?pos(S.B,t) : 0; }
+function refV(f,t){ return f==='A'?vel(S.A,t) : f==='B'?vel(S.B,t) : 0; }
+function ease(u){ return u<=0?0 : u>=1?1 : u*u*(3-2*u); }
+function fmt(v,d){ var s=(v<0?'−':'+'); return s+Math.abs(v).toFixed(d===undefined?1:d); }
+
+/* ---------------- canvas ---------------- */
+var stage=document.getElementById('stage'), cv=document.getElementById('cv');
+var mctx=cv.getContext('2d'), ctx=mctx;          // `ctx` is swapped while cross-fading
+var oc=document.createElement('canvas'), octx=oc.getContext('2d');
+var W=0,H=0,dpr=1;
+function resize(){
+  dpr=window.devicePixelRatio||1;
+  W=stage.clientWidth; H=stage.clientHeight;
+  cv.width=oc.width=Math.round(W*dpr);
+  cv.height=oc.height=Math.round(H*dpr);
+  mctx.setTransform(dpr,0,0,dpr,0,0);
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  layoutCards();
+}
+
+/* where the floating cards sit, so the mirror can duck under them on a phone */
+var cardBox={bottom:0, free:1e9};
+function layoutCards(){
+  var h=document.getElementById('hud'), e=document.getElementById('eqn');
+  cardBox.bottom=Math.max(h.offsetTop+h.offsetHeight, e.offsetTop+e.offsetHeight);
+  cardBox.free=e.offsetLeft-(h.offsetLeft+h.offsetWidth)-24;
+}
+window.addEventListener('resize',resize);
+
+var scale=8;                                   // px per metre, eased
+
+/* nice round step so grid marks stay ~ every `minPx` pixels */
+function niceStep(minPx){
+  var want=minPx/scale, steps=[5,10,20,25,50,100,200,500,1000,2000,5000];
+  for(var i=0;i<steps.length;i++) if(steps[i]>=want) return steps[i];
+  return 10000;
+}
+
+/* ---------------- drawing helpers ---------------- */
+function arrow(x,y,len,col,label){
+  var dir = len<0?-1:1, L=Math.abs(len);
+  // keep the whole arrow on the canvas — a long one near the edge would be cut off
+  var tip=x+dir*(L+9);
+  if(tip>W-6) x-=tip-(W-6); else if(tip<6) x+=6-tip;
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=3; ctx.lineCap='round';
+  if(L<3){                                     // at rest in this frame
+    ctx.globalAlpha=.9;
+    ctx.beginPath(); ctx.arc(x,y,4.5,0,6.2832); ctx.stroke();
+    ctx.globalAlpha=1;
+  }else{
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dir*L,y); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x+dir*(L+8),y); ctx.lineTo(x+dir*L,y-6); ctx.lineTo(x+dir*L,y+6);
+    ctx.closePath(); ctx.fill();
+  }
+  if(label){
+    ctx.font='700 12px ui-sans-serif,system-ui,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='bottom';
+    ctx.fillText(label, x+dir*(L/2), y-9);
+  }
+}
+
+function tree(x,base,h){
+  ctx.fillStyle='#2b3d33';
+  ctx.fillRect(x-1.5, base-h*0.32, 3, h*0.32);
+  ctx.fillStyle='#3f6b4d';
+  ctx.beginPath();
+  ctx.moveTo(x, base-h); ctx.lineTo(x+h*0.30, base-h*0.28); ctx.lineTo(x-h*0.30, base-h*0.28);
+  ctx.closePath(); ctx.fill();
+}
+
+function car(x, base, len, col, name, isCam, faceRight){
+  var h=len*0.42, w=len, r=Math.max(2,h*0.18);
+  var y=base-h;
+  ctx.save();
+  ctx.translate(x,0);
+  if(!faceRight) ctx.scale(-1,1);
+  // body
+  ctx.fillStyle=col; ctx.globalAlpha=.92;
+  ctx.beginPath();
+  if(ctx.roundRect){ ctx.roundRect(-w/2, y, w, h, r); } else { ctx.rect(-w/2,y,w,h); }
+  ctx.fill(); ctx.globalAlpha=1;
+  // cabin
+  ctx.fillStyle='#0b1017'; ctx.globalAlpha=.55;
+  ctx.beginPath();
+  ctx.moveTo(-w*0.22, y+h*0.06);
+  ctx.lineTo( w*0.10, y+h*0.06);
+  ctx.lineTo( w*0.24, y+h*0.48);
+  ctx.lineTo(-w*0.30, y+h*0.48);
+  ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+  // wheels
+  ctx.fillStyle='#0d1219';
+  var wr=Math.max(2.2,h*0.26);
+  ctx.beginPath(); ctx.arc(-w*0.27, base, wr, 0, 6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc( w*0.27, base, wr, 0, 6.2832); ctx.fill();
+  ctx.restore();
+  // name badge
+  ctx.font='800 '+Math.max(10,Math.min(16,h*0.62))+'px ui-sans-serif,system-ui,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#06121a';
+  ctx.fillText(name, x, y+h*0.60);
+  if(isCam){
+    ctx.font='13px system-ui,"Segoe UI Emoji",sans-serif';
+    ctx.textBaseline='bottom';
+    ctx.fillText('🎥', x, y-4);
+  }
+}
+
+/* =================================================================
+   THE GROUND CAMERA — the road from the side, both cars in view.
+   ================================================================= */
+function paintSide(f,t){
+  var xa=pos(S.A,t), xb=pos(S.B,t), va=vel(S.A,t), vb=vel(S.B,t);
+  var origin=refX(f,t);
+
+  // zoom so both cars always stay on screen
+  var half=Math.max(Math.abs(xa-origin), Math.abs(xb-origin))+12;
+  if(half<26) half=26;
+  var target=Math.max(0.45, Math.min(15, (W/2-46)/half));
+  if(S.snapZoom){ scale=target; S.snapZoom=false; }
+  else scale += (target-scale)*0.12;
+
+  var sx=function(xw){ return W/2+(xw-origin)*scale; };
+
+  var horizon=H*0.46, roadTop=H*0.53, roadBot=H*0.83;
+  var laneA=roadTop+(roadBot-roadTop)*0.44, laneB=roadBot-6;
+  var carLen=Math.max(20, Math.min(96, 4.6*scale));
+
+  // ---- sky + ground ----
+  var g=ctx.createLinearGradient(0,0,0,horizon);
+  g.addColorStop(0,'#0a0f18'); g.addColorStop(1,'#16222f');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,horizon);
+  ctx.fillStyle='#12211a'; ctx.fillRect(0,horizon,W,H-horizon);
+
+  // ---- ground furniture (fixed to the ROAD, so it slides when the camera rides a car) ----
+  var step=niceStep(78);
+  var wMin=origin-(W/2)/scale-step, wMax=origin+(W/2)/scale+step;
+  var i0=Math.floor(wMin/step), i1=Math.ceil(wMax/step);
+  var k, xw, px;
+  for(k=i0;k<=i1;k++){
+    xw=k*step; px=sx(xw);
+    tree(px, horizon+6, Math.max(16,Math.min(46, 5*scale)));
+    if(S.show.km){
+      ctx.font='600 10px ui-sans-serif,system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='top';
+      ctx.fillStyle='#4a5a6b';
+      ctx.fillText(xw+' m', px, roadTop-14);
+    }
+  }
+
+  // ---- road ----
+  ctx.fillStyle='#1b2230'; ctx.fillRect(0,roadTop,W,roadBot-roadTop);
+  ctx.fillStyle='#2b3546'; ctx.fillRect(0,roadTop,W,2); ctx.fillRect(0,roadBot-2,W,2);
+  // dashes ride with the road, so in frame A/B they visibly stream backwards
+  var dstep=niceStep(46), dlen=dstep*0.45*scale;
+  ctx.fillStyle='#3d4a5e';
+  for(k=Math.floor(wMin/dstep); k<=Math.ceil(wMax/dstep); k++){
+    px=sx(k*dstep);
+    ctx.fillRect(px-dlen/2, (roadTop+roadBot)/2-1.5, dlen, 3);
+  }
+
+  // ---- strobe dots ----
+  if(S.show.dots){
+    for(k=0;k<S.trail.length;k++){
+      var d=S.trail[k];
+      var rf=(f==='A'?d.xa:f==='B'?d.xb:0);
+      var ra=d.xa-rf, rb=d.xb-rf;
+      var al=0.20+0.55*(k/Math.max(1,S.trail.length-1));
+      ctx.globalAlpha=al;
+      ctx.fillStyle=COL.A;
+      ctx.beginPath(); ctx.arc(W/2+ra*scale, laneA+7, 2.6, 0, 6.2832); ctx.fill();
+      ctx.fillStyle=COL.B;
+      ctx.beginPath(); ctx.arc(W/2+rb*scale, laneB+5, 2.6, 0, 6.2832); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  }
+
+  var pxa=sx(xa), pxb=sx(xb);
+
+  // ---- gap ----
+  if(S.show.gap){
+    var gy=roadBot+16, dx=xb-xa;
+    ctx.strokeStyle='#4d5b6e'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(pxa,laneA+8); ctx.lineTo(pxa,gy+6);
+    ctx.moveTo(pxb,laneB+4); ctx.lineTo(pxb,gy+6); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(pxa,gy); ctx.lineTo(pxb,gy); ctx.stroke();
+    ctx.font='700 11px ui-sans-serif,system-ui,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle='#8b97a8';
+    ctx.fillText(Math.abs(dx).toFixed(1)+' m', (pxa+pxb)/2, gy+4);
+  }
+
+  // ---- cars ----
+  car(pxa, laneA, carLen, COL.A, 'A', f==='A', S.A.face>0);
+  car(pxb, laneB, carLen, COL.B, 'B', f==='B', S.B.face>0);
+
+  // ---- velocity arrows, measured in the CURRENT frame ----
+  var vr=refV(f,t);
+  var rva=va-vr, rvb=vb-vr, rvg=-vr;
+  if(S.show.arrow){
+    var K=Math.max(3, Math.min(5.2, W*0.006));
+    arrow(pxa, laneA-carLen*0.42-16, rva*K, COL.A, fmt(rva)+' m/s');
+    arrow(pxb, laneB-carLen*0.42-16, rvb*K, COL.B, fmt(rvb)+' m/s');
+    // the ground itself: pin the arrow to the marker nearest the middle
+    var near=Math.round(origin/step)*step, npx=sx(near);
+    arrow(npx, horizon-14, rvg*K, COL.G, 'ground '+fmt(rvg));
+  }
+
+  // ---- scale bar ----
+  var bar=niceStep(70), bpx=bar*scale;
+  ctx.strokeStyle='#3a475a'; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(14,H-16); ctx.lineTo(14+bpx,H-16);
+  ctx.moveTo(14,H-21); ctx.lineTo(14,H-11);
+  ctx.moveTo(14+bpx,H-21); ctx.lineTo(14+bpx,H-11);
+  ctx.stroke();
+  ctx.font='600 10px ui-sans-serif,system-ui,sans-serif';
+  ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillStyle='#5d6a7c';
+  ctx.fillText(bar+' m', 16, H-20);
+}
+
+/* =================================================================
+   THE CAMERAS INSIDE THE CARS — what the driver sees through the
+   windscreen: the road rushing at you and the other car, nothing else.
+   Distance d ahead maps to the screen through a pinhole:
+       y = horizon + F(eye − z)/d      x = centre + F·u/d
+   Both the road edges and the trees fall out of that one rule.
+   ================================================================= */
+var EYE=2.4, ROADW=3.6, LANEU=1.9, TREEU=6.6, CARW=1.85, CARH=1.5;
+
+function carPOV(x,base,w,h,col,name,front){
+  var r=Math.max(1.5,h*0.17);
+  ctx.fillStyle='rgba(0,0,0,.38)';
+  ctx.beginPath(); ctx.ellipse(x, base, w*0.58, Math.max(1.4,h*0.11), 0,0,6.2832); ctx.fill();
+  ctx.fillStyle=col; ctx.globalAlpha=.94;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x-w/2, base-h, w, h, r); else ctx.rect(x-w/2,base-h,w,h);
+  ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle='#0b1017'; ctx.globalAlpha=.55;                     // window
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x-w*0.35, base-h*0.93, w*0.70, h*0.38, r*0.7);
+  else ctx.rect(x-w*0.35, base-h*0.93, w*0.70, h*0.38);
+  ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle= front ? '#ffe9a8' : '#ff5a5a';                     // head / tail lamps
+  var lw=Math.max(1,w*0.15), lh=Math.max(1,h*0.14);
+  ctx.fillRect(x-w*0.45, base-h*0.42, lw, lh);
+  ctx.fillRect(x+w*0.45-lw, base-h*0.42, lw, lh);
+  ctx.fillStyle='#0d1219';                                          // wheels
+  ctx.fillRect(x-w*0.52, base-h*0.17, Math.max(1,w*0.13), h*0.17);
+  ctx.fillRect(x+w*0.39, base-h*0.17, Math.max(1,w*0.13), h*0.17);
+  if(w>30){
+    ctx.font='800 '+(h*0.30).toFixed(0)+'px ui-sans-serif,system-ui,sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#06121a';
+    ctx.fillText(name, x, base-h*0.30);
+  }
+}
+
+/* one panel of driver's view: the whole windscreen, or the little mirror */
+function povPanel(bx,by,bw,bh, camCar, othCar, dir, t, mirror){
+  var cx=bx+bw/2, hy=by+bh*(mirror?0.38:0.38), F=0.72*bw, yBot=by+bh;
+  var xc=pos(camCar,t), xo=pos(othCar,t), vo=vel(othCar,t);
+  var k=ROADW/EYE, isA=(camCar===S.A);
+  function Y(d,z){ return hy + F*(EYE-(z||0))/d; }
+  function X(d,u){ return cx + F*u/d; }
+  var dMin=Math.max(1.1, F*EYE/(yBot-hy)), dMax=mirror?90:260;
+
+  ctx.save();
+  ctx.beginPath();
+  if(mirror&&ctx.roundRect) ctx.roundRect(bx,by,bw,bh,7); else ctx.rect(bx,by,bw,bh);
+  ctx.clip();
+
+  var g=ctx.createLinearGradient(0,by,0,hy);
+  g.addColorStop(0,'#0a0f18'); g.addColorStop(1,'#16222f');
+  ctx.fillStyle=g; ctx.fillRect(bx,by,bw,hy-by);
+  ctx.fillStyle='#12211a'; ctx.fillRect(bx,hy,bw,yBot-hy);
+
+  // road: both edges are straight lines out of the vanishing point
+  ctx.fillStyle='#1b2230';
+  ctx.beginPath();
+  ctx.moveTo(cx,hy); ctx.lineTo(cx-k*(yBot-hy),yBot); ctx.lineTo(cx+k*(yBot-hy),yBot);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#4a5872'; ctx.lineWidth=mirror?1:2.5;
+  ctx.beginPath();
+  ctx.moveTo(cx,hy); ctx.lineTo(cx-k*(yBot-hy),yBot);
+  ctx.moveTo(cx,hy); ctx.lineTo(cx+k*(yBot-hy),yBot);
+  ctx.stroke();
+
+  /* Everything below belongs to the GROUND.  Leave it out and there is nothing
+     outside the car to judge your own speed against — which is exactly how it
+     feels to sit in a moving car, and leaves the other car as the only thing
+     in the window that moves.  The tick-box puts the world back. */
+  if(S.show.flow){
+
+  // walk the ground-fixed marks that fall inside the view, far ones first
+  function marks(step,cb){
+    var p1=xc+dMin*dir, p2=xc+dMax*dir;
+    var lo=Math.min(p1,p2), hi=Math.max(p1,p2), list=[], m;
+    for(m=Math.ceil(lo/step); m<=Math.floor(hi/step); m++)
+      list.push({m:m, label:m*step, d:(m*step-xc)*dir});
+    list.sort(function(a,b){ return b.d-a.d; });
+    for(var i=0;i<list.length;i++) cb(list[i]);
+  }
+
+  // centre dashes streaming past
+  ctx.fillStyle='#3d4a5e';
+  marks(9,function(o){
+    var d0=o.d, d1=o.d+3.2;
+    if(d1<dMin) return;
+    if(d0<dMin) d0=dMin;
+    var y0=Y(d0), y1=Y(d1), w0=F*0.17/d0, w1=F*0.17/d1;
+    ctx.beginPath();
+    ctx.moveTo(cx-w0,y0); ctx.lineTo(cx+w0,y0); ctx.lineTo(cx+w1,y1); ctx.lineTo(cx-w1,y1);
+    ctx.closePath(); ctx.fill();
+  });
+
+  // roadside trees, and the distance signs that let you read the ground
+  marks(mirror?50:25,function(o){
+    if(o.d<dMin+0.8 || o.d>170) return;
+    var side=(o.m%2===0)?-1:1;
+    tree(X(o.d,side*TREEU), Y(o.d), F*4.6/o.d);
+    if(S.show.km && !mirror && o.d<90 && o.m%2===0){
+      var fs=Math.max(8, Math.min(15, F*0.85/o.d));
+      ctx.font='600 '+fs.toFixed(1)+'px ui-sans-serif,system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillStyle='#5b6d82';
+      ctx.fillText(o.label+' m', X(o.d,side*(TREEU-2.4)), Y(o.d,1.5));
+    }
+  });
+
+  }   /* end of the ground-fixed world */
+
+  // strobe dots: where the other car was, every 0.5 s
+  if(S.show.dots && !mirror){
+    for(var i=0;i<S.trail.length;i++){
+      var tr=S.trail[i];
+      var dd=((isA?tr.xb:tr.xa)-(isA?tr.xa:tr.xb))*dir;
+      if(dd<Math.max(dMin+0.4,4)||dd>dMax) continue;
+      ctx.globalAlpha=0.25+0.5*(i/Math.max(1,S.trail.length-1));
+      ctx.fillStyle=isA?COL.B:COL.A;
+      ctx.beginPath();
+      // laid down beside the lane, so the car itself never hides its own trail
+      ctx.arc(X(dd,LANEU+1.25), Y(dd), Math.max(1.4,Math.min(7,F*0.19/dd)), 0, 6.2832);
+      ctx.fill(); ctx.globalAlpha=1;
+    }
+  }
+
+  // the other car, in the next lane
+  var dO=(xo-xc)*dir, seen=false;
+  if(dO>=2.6 && dO<=dMax){
+    seen=true;
+    var wpx=F*CARW/dO, hpx=F*CARH/dO, base=Y(dO), sxx=X(dO,LANEU);
+    carPOV(sxx, base, wpx, hpx, isA?COL.B:COL.A, isA?'B':'A', vo*dir<0);
+    if(!mirror && S.show.gap && wpx>12){
+      ctx.font='700 12px ui-sans-serif,system-ui,sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillStyle='#c3ccd9';
+      ctx.fillText(Math.abs(xo-xc).toFixed(1)+' m', sxx, base-hpx-9);
+    }
+  }
+  ctx.restore();
+  return seen;
+}
+
+function chip(x,y,text,col,align){
+  ctx.font='700 12px ui-sans-serif,system-ui,sans-serif';
+  var w=ctx.measureText(text).width+18, h=25;
+  if(align==='center') x-=w/2; else if(align==='right') x-=w;
+  ctx.fillStyle='rgba(10,13,18,.82)'; ctx.strokeStyle=col; ctx.lineWidth=1;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(x,y,w,h,8); else ctx.rect(x,y,w,h);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle=col; ctx.textAlign='left'; ctx.textBaseline='middle';
+  ctx.fillText(text, x+9, y+h/2+.5);
+}
+
+function paintPOV(f,t){
+  var camCar=(f==='A'?S.A:S.B), othCar=(f==='A'?S.B:S.A);
+  var dir=camCar.face, other=(f==='A'?'B':'A');
+  var xc=pos(camCar,t), xo=pos(othCar,t), vc=vel(camCar,t), vo=vel(othCar,t);
+  var dO=(xo-xc)*dir;
+
+  povPanel(0,0,W,H, camCar, othCar, dir, t, false);
+
+  // ---- you are sitting inside a car: pillars + dashboard ----
+  ctx.fillStyle='#0b1017';
+  ctx.beginPath();
+  ctx.moveTo(0,0); ctx.lineTo(W*0.030,0); ctx.lineTo(0,H*0.55); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(W,0); ctx.lineTo(W*0.970,0); ctx.lineTo(W,H*0.55); ctx.closePath(); ctx.fill();
+  var dh=Math.max(50,H*0.16);
+  var gd=ctx.createLinearGradient(0,H-dh*1.3,0,H);
+  gd.addColorStop(0,'#0d1219'); gd.addColorStop(1,'#04070a');
+  ctx.fillStyle=gd;
+  ctx.beginPath();
+  ctx.moveTo(0,H); ctx.lineTo(0,H-dh*0.60);
+  ctx.quadraticCurveTo(W/2, H-dh*1.32, W, H-dh*0.60);
+  ctx.lineTo(W,H); ctx.closePath(); ctx.fill();
+
+  // ---- rear-view mirror: the road behind you ----
+  var mw=Math.min(320,Math.max(126,W*0.28)), mh=mw*0.30, mx=W/2-mw/2;
+  var my=Math.max(8,H*0.012), tucked=(mw>cardBox.free);
+  // on a phone the cards fill the top: drop the mirror under them and off to the
+  // left, where it can't sit on top of the far car near the vanishing point
+  if(tucked){ my=cardBox.bottom+10; mx=12; }
+  var inMirror=povPanel(mx,my,mw,mh, camCar, othCar, -dir, t, true);
+  ctx.strokeStyle=inMirror?COL[other]:'#2b3546'; ctx.lineWidth=inMirror?2:1.5;
+  ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(mx,my,mw,mh,7); else ctx.rect(mx,my,mw,mh);
+  ctx.stroke();
+  ctx.font='700 9px ui-sans-serif,system-ui,sans-serif';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.fillStyle='#5d6a7c';
+  ctx.fillText('MIRROR', mx+mw/2, my+mh+4);
+
+  // ---- what the driver should notice ----
+  var vg=-vc;                                   // the ground, seen from this car
+  // the number stays honest even when there is no scenery left to show it off
+  chip(14, H-34, 'ground '+fmt(vg)+' m/s'+
+       ((S.show.flow||Math.abs(vg)<0.05||W<560)?'':' · nothing to see it by'), COL.G, 'left');
+  if(W>620) chip(W/2, H-34, '🎥 you are in car '+f, COL[f], 'center');
+  if(dO<2.6){
+    var behind=(dO<=-2.6);
+    chip(tucked?mx:W/2, my+mh+18, behind ? other+' is behind you → mirror'
+                                         : other+' is right beside you',
+         COL[other], tucked?'left':'center');
+  }else{
+    var closing=(vo-vc)*dir;
+    chip(W-14, H-34,
+         other+(Math.abs(closing)<0.05 ? ' holds its place'
+              : closing<0 ? ' coming closer' : ' pulling away'),
+         COL[other], 'right');
+  }
+}
+
+/* =================================================================
+   Ground camera and driver camera are different pictures, so the
+   switch is a cross-fade rather than a pan.
+   ================================================================= */
+function paint(f,t){ if(f==='G') paintSide(f,t); else paintPOV(f,t); }
+
+function draw(){
+  var t=S.t, e=ease(S.tr);
+  if(S.tr<1 && S.prev!==S.frame){
+    paint(S.prev,t);
+    var main=ctx;
+    ctx=octx; octx.setTransform(dpr,0,0,dpr,0,0); octx.clearRect(0,0,W,H);
+    paint(S.frame,t);
+    ctx=main;
+    ctx.save(); ctx.globalAlpha=e; ctx.drawImage(oc,0,0,W,H); ctx.restore();
+  }else{
+    paint(S.frame,t);
+  }
+  readout(t);
+}
+
+/* ---------------- numbers ---------------- */
+var $=function(id){ return document.getElementById(id); };
+function readout(t){
+  var va=vel(S.A,t), vb=vel(S.B,t), vr=refV(S.frame,t);
+  var dx=pos(S.B,t)-pos(S.A,t);
+  var rva=va-vr, rvb=vb-vr, rvg=-vr;
+  $('o-frame').textContent=S.frame;
+  $('o-t').textContent=t.toFixed(1)+' s';
+  $('d-t').textContent=t.toFixed(1)+' s';
+  $('o-va').textContent=fmt(rva)+' m/s';
+  $('o-vb').textContent=fmt(rvb)+' m/s';
+  $('o-vg').textContent=fmt(rvg)+' m/s';
+  // the gap shrinks or grows at the same rate in EVERY frame — worth pointing at
+  var rate=dx*(vb-va);
+  $('o-gap').textContent=Math.abs(dx).toFixed(1)+' m'+(Math.abs(rate)<1e-6?'':rate<0?' ↓':' ↑');
+  $('row-A').classList.toggle('me', S.frame==='A');
+  $('row-B').classList.toggle('me', S.frame==='B');
+  $('row-G').classList.toggle('me', S.frame==='G');
+
+  // v(seen from F) = v(ground) − v(F), written out with the numbers in place
+  var f=S.frame, lines=[
+    {c:'a', n:'A', v:va, on:f!=='A'},
+    {c:'b', n:'B', v:vb, on:f!=='B'},
+    {c:'g', n:'ground', v:0, on:f!=='G'}
+  ], out=[], j;
+  for(j=0;j<lines.length;j++){
+    var L=lines[j];
+    if(!L.on){ out.push({c:L.c, s:L.n+' is the camera → 0'}); continue; }
+    out.push({c:L.c, s:'v'+L.n+' = '+fmt(L.v)+' '+(vr<0?'+':'−')+' '+Math.abs(vr).toFixed(1)+' = '+fmt(L.v-vr)});
+  }
+  for(j=0;j<3;j++){
+    var el=$('e-'+(j+1));
+    el.className='l '+out[j].c;
+    el.textContent=out[j].s;
+  }
+}
+
+/* ---------------- loop ---------------- */
+var last=0;
+function frame(now){
+  var dt=(now-last)/1000; last=now;
+  if(!(dt>0)||dt>0.1) dt=0.016;
+  if(S.tr<1){ S.tr=Math.min(1,S.tr+dt/TRANS); }
+  faceUp(S.A); faceUp(S.B);
+  if(S.playing){
+    S.t+=dt*S.rate;
+    while(S.nextDot<=S.t){ recordDot(S.nextDot); S.nextDot+=DOT_DT; }
+  }
+  draw();
+  requestAnimationFrame(frame);
+}
+/* which way is the driver looking?  the way the car is driving.  It stays put
+   while the car is nearly stopped, so the view can't flicker at a standstill. */
+function faceUp(o){
+  var v=vel(o,S.t);
+  if(Math.abs(v)>0.5) o.face=(v>0?1:-1);
+}
+function recordDot(tt){
+  S.trail.push({t:tt, xa:pos(S.A,tt), xb:pos(S.B,tt)});
+  if(S.trail.length>MAX_DOTS) S.trail.shift();
+}
+
+/* ---------------- controls ---------------- */
+function setFrame(f){
+  if(f===S.frame) return;
+  // freeze where the old camera was, then glide to the new one
+  S.prev=S.frame; S.frame=f; S.tr=0;
+  var b=document.querySelectorAll('#cams button'), i;
+  for(i=0;i<b.length;i++) b[i].classList.toggle('on', b[i].dataset.f===f);
+}
+document.getElementById('cams').addEventListener('click',function(ev){
+  var b=ev.target.closest('button'); if(b) setFrame(b.dataset.f);
+});
+
+function play(on){
+  S.playing=on;
+  var b=$('b-play');
+  b.textContent=on?'⏸ Pause':'▶ Play';
+  b.classList.toggle('on',on);
+}
+$('b-play').onclick=function(){ play(!S.playing); };
+$('b-step').onclick=function(){
+  play(false);
+  S.t+=0.2;
+  while(S.nextDot<=S.t){ recordDot(S.nextDot); S.nextDot+=DOT_DT; }
+};
+$('b-reset').onclick=function(){ reset(); };
+
+function reset(){
+  play(false);
+  S.t=0; S.trail=[]; S.nextDot=0;
+  S.A.x0=-S.gap0/2; S.A.t0=0; S.A.face=S.A.v0<0?-1:1;
+  S.B.x0= S.gap0/2; S.B.t0=0; S.B.face=S.B.v0<0?-1:1;
+  S.snapZoom=true;
+  recordDot(0); S.nextDot=DOT_DT;
+}
+
+/* a slider moved mid-run must not teleport the car: rebase to here-and-now */
+function rebase(o){ var x=pos(o,S.t), v=vel(o,S.t); o.x0=x; o.v0=v; o.t0=S.t; }
+
+function bindV(car,inp,lab){
+  $(inp).addEventListener('input',function(){
+    rebase(S[car]);
+    S[car].v0=parseFloat(this.value);
+    $(lab).textContent=fmt(S[car].v0,0)+' m/s';
+    clearPreset();
+  });
+}
+function bindA(car,inp,lab){
+  $(inp).addEventListener('input',function(){
+    rebase(S[car]);
+    S[car].a=parseFloat(this.value);
+    $(lab).textContent=(S[car].a?fmt(S[car].a,1):'0')+' m/s²';
+    clearPreset();
+  });
+}
+bindV('A','i-va','l-va'); bindA('A','i-aa','l-aa');
+bindV('B','i-vb','l-vb'); bindA('B','i-ab','l-ab');
+
+$('i-d0').addEventListener('input',function(){
+  S.gap0=parseFloat(this.value);
+  $('l-d0').textContent=S.gap0+' m';
+  reset();
+});
+$('i-rate').addEventListener('input',function(){
+  S.rate=parseFloat(this.value);
+  $('l-rate').textContent=S.rate.toFixed(1)+'×';
+});
+
+var chk={'c-arrow':'arrow','c-dots':'dots','c-gap':'gap','c-km':'km','c-flow':'flow'};
+Object.keys(chk).forEach(function(id){
+  $(id).addEventListener('change',function(){ S.show[chk[id]]=this.checked; });
+});
+
+/* ---------------- presets ---------------- */
+var PRESETS={
+  same:{va:12,aa:0,vb:5,ab:0,f:'G'},
+  opp:{va:12,aa:0,vb:-8,ab:0,f:'G'},
+  rest:{va:12,aa:0,vb:0,ab:0,f:'A'},
+  equal:{va:10,aa:0,vb:10,ab:0,f:'A'},
+  acc:{va:12,aa:0,vb:5,ab:2,f:'A'}
+};
+function clearPreset(){
+  var b=document.querySelectorAll('#presets .case'), i;
+  for(i=0;i<b.length;i++) b[i].classList.remove('on');
+}
+function applyPreset(key){
+  var p=PRESETS[key]; if(!p) return;
+  S.A.v0=p.va; S.A.a=p.aa; S.B.v0=p.vb; S.B.a=p.ab;
+  $('i-va').value=p.va; $('l-va').textContent=fmt(p.va,0)+' m/s';
+  $('i-aa').value=p.aa; $('l-aa').textContent=(p.aa?fmt(p.aa,1):'0')+' m/s²';
+  $('i-vb').value=p.vb; $('l-vb').textContent=fmt(p.vb,0)+' m/s';
+  $('i-ab').value=p.ab; $('l-ab').textContent=(p.ab?fmt(p.ab,1):'0')+' m/s²';
+  reset();
+  setFrame(p.f); S.tr=1;
+  clearPreset();
+  var b=document.querySelector('#presets .case[data-p="'+key+'"]');
+  if(b) b.classList.add('on');
+}
+document.getElementById('presets').addEventListener('click',function(ev){
+  var b=ev.target.closest('.case'); if(b) applyPreset(b.dataset.p);
+});
+
+/* keyboard: space = play, G/A/B = camera, R = reset */
+window.addEventListener('keydown',function(ev){
+  var k=ev.key.toLowerCase();
+  if(k===' '||ev.code==='Space'){ ev.preventDefault(); play(!S.playing); }
+  else if(k==='g'||k==='a'||k==='b') setFrame(k.toUpperCase());
+  else if(k==='r') reset();
+});
+
+/* ---------------- go ---------------- */
+/* deep link, so a lesson can open straight on a case:  ?p=equal&f=A&t=6 */
+function fromURL(){
+  var q=new URLSearchParams(location.search);
+  if(q.get('p')) applyPreset(q.get('p'));
+  var f=(q.get('f')||'').toUpperCase();
+  if(f==='G'||f==='A'||f==='B'){ setFrame(f); S.tr=1; }
+  var t=parseFloat(q.get('t'));
+  if(t>0){ S.t=t; while(S.nextDot<=S.t){ recordDot(S.nextDot); S.nextDot+=DOT_DT; } S.snapZoom=true; }
+}
+
+resize();
+reset();
+fromURL();
+requestAnimationFrame(function(n){ last=n; frame(n); });
+})();
+</script>
+</body>
+</html>

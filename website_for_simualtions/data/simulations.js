@@ -14,7 +14,8 @@
    Put the string 'all' instead of the list to publish everything again:
        const PUBLISHED = 'all';
    ------------------------------------------------------------------------- */
-const PUBLISHED = ['magnets-grade-10', 'projectile-motion', 'constrained-motion'];
+const PUBLISHED = ['magnets-grade-10', 'projectile-motion', 'constrained-motion',
+                   'relative-motion-1d'];
 
 /* -------------------------------------------------------------------------
    GRADES: the top level of the site. Every grade gets its own dropdown on
@@ -49,6 +50,13 @@ const TOPICS = [
 
 const SIMS = [
   /* ---------------- MECHANICS ---------------- */
+  { id: 'relative-motion-1d', topic: 'mechanics', grade: 11, title: 'Relative Motion · 1D',
+    blurb: 'Watch two cars from the roadside, then from the driver\'s seat.',
+    story: 'Cars A and B drive along one straight road. Camera G watches from the roadside. Cameras A and B put you in the driver\'s seat: there is nothing outside to judge your own speed by, exactly as it feels in a moving car, and the only thing that moves in the whole window is the other car, ahead of you or behind you in the mirror. Nothing about the cars changes, yet every number does. Set each car\'s speed and direction, switch cameras, and read the subtraction v(seen) = v − v(camera) live on screen. Try "equal speed" and watch the other car hang motionless, then bring back the trees and road markings to reveal that you were racing along the whole time.',
+    path: '../relative_motion/index.html',
+    thumb: '',
+    youtube: '' },
+
   { id: 'projectile-motion', topic: 'mechanics', grade: 11, title: 'Projectile Motion',
     blurb: 'One arc, two independent motions. Set the launch and watch.',
     story: 'Horizontal motion is steady, vertical motion is pulled by gravity, and together they draw the arc. Choose a case (level ground, a tower down to a platform, or a slope), set the speed and angle, then scrub through the flight and read T, H and R straight off the picture. Turn on the components, the twin angle and the predicted path to see why 30° and 60° land in the same place.',
